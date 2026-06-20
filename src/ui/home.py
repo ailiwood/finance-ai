@@ -224,7 +224,6 @@ def show_home() -> None:
     # Compliance check
     if st.session_state.get("show_compliance_check"):
         from src.compliance.phrase_checker import scan_project
-        from src.compliance.disclaimer import get_ui_disclaimer
 
         violations = scan_project()
         if violations:
