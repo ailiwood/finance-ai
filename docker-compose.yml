@@ -1,0 +1,110 @@
+# QuantSage Docker Compose
+# =========================
+# Quick start:
+#   docker compose up -d              # UI only (CPU)
+#   docker compose --profile gpu up -d # UI + GPU plugins
+#   docker compose --profile full up -d # All services
+#
+# Access: http://localhost:8501
+
+services:
+  # === Streamlit UI (always on) ===
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quantsage:latest
+    container_name: quantsage-ui
+    command: ui
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - KRONOS_SERVICE_URL=http://kronos:8100
+      - FINBERT_SERVICE_URL=http://finbert:8101
+    volumes:
+      - ./reports:/app/reports
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - quantsage_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - quantsage-net
+
+  # === Kronos K-line Prediction (GPU optional) ===
+  kronos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quantsage:latest
+    container_name: quantsage-kronos
+    command: kronos
+    ports:
+      - "8100:8100"
+    env_file:
+      - .env
+    environment:
+      - KRONOS_ENABLED=true
+    volumes:
+      - ./cache:/app/cache
+      - quantsage_data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - gpu
+      - full
+    networks:
+      - quantsage-net
+
+  # === FinBERT Sentiment Analysis (GPU optional) ===
+  finbert:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quantsage:latest
+    container_name: quantsage-finbert
+    command: finbert
+    ports:
+      - "8101:8101"
+    env_file:
+      - .env
+    environment:
+      - FINBERT_ENABLED=true
+    volumes:
+      - ./cache:/app/cache
+      - quantsage_data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - gpu
+      - full
+    networks:
+      - quantsage-net
+
+volumes:
+  quantsage_data:
+    name: quantsage_data
+
+networks:
+  quantsage-net:
+    name: quantsage-net
+    driver: bridge

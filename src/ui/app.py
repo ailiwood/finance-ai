@@ -1,0 +1,128 @@
+"""QuantSage main entry point.
+
+Orchestrates: Disclaimer Gate -> Config Wizard -> Home.
+
+Launch: streamlit run src/ui/app.py
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path (for `streamlit run` from project root)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import streamlit as st
+
+# Page config MUST be the first Streamlit command
+st.set_page_config(
+    page_title="QuantSage",
+    page_icon="\U0001f4ca",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+from src.ui.disclaimer_gate import show_disclaimer_gate
+from src.ui.config_wizard import show_wizard
+from src.ui.home import show_home
+from src.core.config_manager import (
+    is_configured, check_disclaimer_accepted, CONFIG_DIR,
+)
+from src.compliance.disclaimer import get_ui_disclaimer
+
+
+CSS_GLOBAL = """
+<style>
+/* Hide Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Dark theme base */
+.stApp {
+    background-color: #0d0d1a;
+}
+
+/* Override Streamlit default colors */
+.stButton > button {
+    border-radius: 6px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0f0f1a;
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+</style>
+"""
+
+
+def _show_disclaimer_footer() -> None:
+    """Always-visible disclaimer footer at the bottom of every page."""
+    st.divider()
+    st.caption(f"⚠️ {get_ui_disclaimer()}")
+
+
+def _init_session() -> None:
+    """Initialize session state defaults."""
+    defaults = {
+        "disclaimer_accepted": False,
+        "config_complete": False,
+        "wizard_step": 0,
+    }
+    for key, default in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+
+def main() -> None:
+    """Main application flow.
+
+    Flow:
+    1. Initialize session state
+    2. Check disclaimer gate
+    3. Check configuration
+    4. Route to wizard or home
+    """
+    # Ensure config directory exists
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Inject global CSS
+    st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
+
+    _init_session()
+
+    # Gate 1: Disclaimer
+    if not check_disclaimer_accepted():
+        show_disclaimer_gate()
+        return  # st.stop() called inside show_disclaimer_gate
+
+    # Gate 2: Configuration
+    config_complete = st.session_state.get("config_complete", False)
+    if not config_complete and not is_configured():
+        show_wizard()
+        return
+
+    # If config exists but session flag isn't set (e.g., from M1), set it
+    if is_configured():
+        st.session_state.config_complete = True
+
+    # Main app
+    show_home()
+    _show_disclaimer_footer()
+
+
+if __name__ == "__main__":
+    main()

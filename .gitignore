@@ -1,0 +1,56 @@
+# 环境配置（含密钥，绝不提交）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.whl
+.venv/
+venv/
+
+# 缓存
+cache/
+*.parquet
+*.duckdb
+
+# 日志
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 数据
+data/
+*.csv
+*.json
+!package.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Reports (generated)
+reports/
+
+# Docker build context
+.dockerignore
+
+# Test artifacts
+.pytest_cache/
+
+# 临时文件
+tmp/
+*.tmp
+
+# Claude Code (not for distribution)
+.claude/
+CC_INIT_PROMPT.md
+quantsage-cc-config.zip
