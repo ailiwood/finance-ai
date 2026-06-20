@@ -88,12 +88,23 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta = TradingAgentsGraph(debug=False, config=ta_config)
         _, decision = ta.propagate(symbol, "2025-06-18")
 
+        # Extract only serializable fields from decision
+        safe_decision = {}
+        if isinstance(decision, dict):
+            for k, v in decision.items():
+                if isinstance(v, (str, int, float, bool, type(None))):
+                    safe_decision[k] = v
+                elif isinstance(v, (list, tuple)):
+                    safe_decision[k] = [x for x in v if isinstance(x, (str, int, float, bool, type(None)))]
+                else:
+                    safe_decision[k] = str(v)[:500]
+
         result = {
             "symbol": symbol,
             "stock_name": stock_name,
             "market": market,
-            "decision": decision if isinstance(decision, dict) else {},
-            "raw": str(decision) if not isinstance(decision, dict) else "",
+            "decision": safe_decision,
+            "raw": str(decision)[:5000] if not isinstance(decision, dict) else "",
             "completed_at": datetime.now().isoformat(),
         }
         _result_file.parent.mkdir(parents=True, exist_ok=True)
