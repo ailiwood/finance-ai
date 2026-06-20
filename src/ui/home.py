@@ -54,6 +54,10 @@ STOCK_NAMES = {
 def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
     """Run TradingAgents-CN analysis in a background thread."""
     try:
+        # Fix encoding and proxy for background thread
+        os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+        os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
+
         st.session_state.analysis_running = True
         st.session_state.analysis_progress = "正在初始化分析引擎..."
         st.session_state.analysis_error = None
