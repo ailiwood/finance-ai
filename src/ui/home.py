@@ -206,6 +206,12 @@ def show_home() -> None:
         import time; time.sleep(3)
         st.rerun()
 
+    # Auto-detect: analysis just finished but results not yet shown
+    if st.session_state.get("analysis_result") and not st.session_state.get("analysis_running"):
+        if not st.session_state.get("_results_shown"):
+            st.session_state._results_shown = True
+            st.rerun()
+
     # ── Error display ──
     if st.session_state.get("analysis_error"):
         st.error(f"分析失败: {st.session_state.analysis_error}")
