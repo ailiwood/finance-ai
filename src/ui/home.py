@@ -88,9 +88,9 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         os.environ["DEEPSEEK_API_KEY"] = ds_key
 
         ta = TradingAgentsGraph(debug=False, config=ta_config)
-        _, decision = ta.propagate(symbol, "2025-06-18")
+        final_state, decision = ta.propagate(symbol, "2025-06-18")
 
-        # Extract serializable fields
+        # Extract decision fields
         safe_decision: dict = {}
         if isinstance(decision, dict):
             for k, v in decision.items():
@@ -99,11 +99,21 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
                 else:
                     safe_decision[k] = str(v)[:500]
 
+        # Extract agent reports from final_state
+        agent_reports = {}
+        for key in ["market_report", "sentiment_report", "news_report",
+                     "fundamentals_report", "trader_investment_plan",
+                     "bull_history", "bear_history", "judge_decision",
+                     "final_trade_decision"]:
+            val = final_state.get(key, "")
+            agent_reports[key] = str(val) if val else ""
+
         _ANALYSIS_MAILBOX = {
             "symbol": symbol,
             "stock_name": stock_name,
             "market": market,
             "decision": safe_decision,
+            "agent_reports": agent_reports,
         }
 
     except Exception as e:
@@ -232,74 +242,84 @@ def show_home() -> None:
     if st.session_state.get("analysis_result") and not st.session_state.get("analysis_running"):
         result = st.session_state.analysis_result
         decision = result.get("decision", {})
+        reports = result.get("agent_reports", {})
 
         st.success(f"✅ {result['symbol']} {result['stock_name']} 分析完成")
 
-        from src.report.report_generator import generate_report
         from src.report.pdf_exporter import export_report_pdf, export_report_markdown
 
-        # Build analysis output for report generator
-        analysis_output = {
-            "decision": decision if isinstance(decision, dict) else {},
-        }
-        if result.get("raw"):
-            analysis_output["reasoning"] = result["raw"]
+        # Build report from agent reports
+        direction_map = {"卖出": "看空", "买入": "看多", "持有": "中性"}
+        action = decision.get("action", "中性")
+        direction = direction_map.get(str(action), "中性")
+        confidence = decision.get("confidence", 0.5)
+        reasoning = decision.get("reasoning", "")
+        risk = decision.get("risk_score", 0.5)
+        tp = decision.get("target_price")
 
-        plugins = []
-        if config.get("kronos_enabled"):
-            plugins.append("kronos")
-        if config.get("finbert_enabled"):
-            plugins.append("finbert")
+        # Assemble full report
+        parts = [
+            f"# QuantSage 研究报告",
+            f"**股票代码**: {result['symbol']}  **股票名称**: {result.get('stock_name', result['symbol'])}  **分析日期**: {datetime.now().strftime('%Y-%m-%d')}",
+            "---",
+        ]
 
-        try:
-            report, data = generate_report(
-                symbol=result["symbol"],
-                stock_name=result.get("stock_name", result["symbol"]),
-                analysis_output=analysis_output,
-                plugins_used=plugins,
-                gpu_used=False,
-            )
-        except Exception:
-            # Fallback: build report manually
-            direction_map = {"卖出": "看空", "买入": "看多", "持有": "中性"}
-            action = decision.get("action", "中性") if isinstance(decision, dict) else "中性"
-            direction = direction_map.get(str(action), "中性")
-            confidence = decision.get("confidence", 0.5) if isinstance(decision, dict) else 0.5
-            reasoning = decision.get("reasoning", str(decision)) if isinstance(decision, dict) else str(decision)
-            risk = decision.get("risk_score", 0.5) if isinstance(decision, dict) else 0.5
-            tp = decision.get("target_price") if isinstance(decision, dict) else None
+        # Market / Technical
+        if reports.get("market_report"):
+            parts.append("## 技术面分析")
+            parts.append(reports["market_report"])
+            parts.append("")
 
-            report = f"""# QuantSage 研究报告
+        # Fundamentals
+        if reports.get("fundamentals_report"):
+            parts.append("## 基本面分析")
+            parts.append(reports["fundamentals_report"])
+            parts.append("")
 
-**股票代码**: {result['symbol']}
-**股票名称**: {result.get('stock_name', result['symbol'])}
-**分析日期**: 2026-06-21
+        # Sentiment
+        if reports.get("sentiment_report"):
+            parts.append("## 情绪面分析")
+            parts.append(reports["sentiment_report"])
+            parts.append("")
 
----
+        # News
+        if reports.get("news_report") and len(reports["news_report"]) > 10:
+            parts.append("## 新闻分析")
+            parts.append(reports["news_report"])
+            parts.append("")
 
-## 综合结论
+        # Risk / Final Decision
+        if reports.get("final_trade_decision") or reports.get("judge_decision"):
+            parts.append("## 风险管控与最终决策")
+            if reports.get("final_trade_decision"):
+                parts.append(reports["final_trade_decision"])
+            elif reports.get("judge_decision"):
+                parts.append(reports["judge_decision"])
+            parts.append("")
 
-**最终观点**: {direction}
-**置信度**: {confidence:.0%}
-**风险评分**: {risk:.1%}"""
-            if tp:
-                report += f"\n**参考价位**: ¥{tp:,.2f}"
-            report += f"""
+        # Conclusion
+        parts.append("---")
+        parts.append("## 综合结论")
+        parts.append(f"**最终观点**: {direction}")
+        parts.append(f"**置信度**: {confidence:.0%}")
+        parts.append(f"**风险评分**: {risk:.1%}")
+        if tp:
+            parts.append(f"**参考价位**: ¥{tp:,.2f}")
+        if reasoning:
+            parts.append(f"**综合推理**: {reasoning}")
+        parts.append("")
+        parts.append("---")
+        parts.append("> 本报告由 QuantSage 自动生成，仅供参考研究，不构成任何投资建议，盈亏自负。")
+        parts.append("*QuantSage · 仅供参考研究 · 不构成投资建议*")
 
-**综合推理**: {reasoning}
-
----
-
-> 本报告由 QuantSage 自动生成，仅供参考研究，不构成任何投资建议，盈亏自负。
-*QuantSage · 仅供参考研究 · 不构成投资建议*
-"""
+        report = "\n\n".join(parts)
 
         with st.expander("查看完整报告", expanded=True):
             st.markdown(report)
 
         col1, col2, col3 = st.columns(3)
+        safe_symbol = result["symbol"].replace("/", "_")
         with col1:
-            safe_symbol = result["symbol"].replace("/", "_")
             st.download_button("下载 Markdown", data=report,
                 file_name=f"{safe_symbol}_报告.md", mime="text/markdown", use_container_width=True)
         with col2:
@@ -308,8 +328,8 @@ def show_home() -> None:
                 with open(pdf_path, "rb") as f:
                     st.download_button("下载 PDF", data=f.read(),
                         file_name=f"{safe_symbol}_报告.pdf", mime="application/pdf", use_container_width=True)
-            except Exception:
-                st.caption("PDF 导出暂不可用")
+            except Exception as e:
+                st.caption(f"PDF 导出暂不可用: {e}")
         with col3:
             if st.button("清除结果", key="clear_result", use_container_width=True):
                 st.session_state.analysis_result = None

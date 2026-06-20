@@ -17,34 +17,25 @@ from fpdf import FPDF
 from src.compliance.disclaimer import get_pdf_footer_text, get_footer_text
 
 
-# Unicode CJK font path (auto-detect)
+# Unicode CJK font path (auto-detect, prefer single TTF over TTC)
 _CJK_FONT_PATH = None
 for _candidate in [
-    "C:/Windows/Fonts/msyh.ttc",
-    "C:/Windows/Fonts/simsun.ttc",
-    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "C:/Windows/Fonts/simhei.ttf",     # 黑体 (Windows, single TTF)
+    "C:/Windows/Fonts/simfang.ttf",    # 仿宋
+    "C:/Windows/Fonts/simkai.ttf",     # 楷体
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux
+    "/System/Library/Fonts/PingFang.ttc",  # macOS
 ]:
     if Path(_candidate).exists():
         _CJK_FONT_PATH = _candidate
         break
 
 
-def _safe_text(text: str) -> str:
-    """Strip characters unsupported by Latin-1 built-in fonts."""
-    result = []
-    for ch in text:
-        try:
-            ch.encode("latin-1")
-            result.append(ch)
-        except UnicodeEncodeError:
-            result.append("?")
-    return "".join(result)
-
-
 def export_report_pdf(
     report_text: str,
     output_path: str | Path,
-    title: str = "QuantSage Research Report",
+    title: str = "QuantSage 研究报告",
 ) -> Path:
     """Export a report to PDF with disclaimer footer on every page.
 
@@ -63,24 +54,30 @@ def export_report_pdf(
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    font_name = "Helvetica"
-    text_filter = _safe_text
+    # Load CJK font if available
+    use_cjk = False
+    if _CJK_FONT_PATH:
+        try:
+            pdf.add_font("CJK", fname=_CJK_FONT_PATH)
+            use_cjk = True
+        except Exception:
+            pass
+    font_name = "CJK" if use_cjk else "Helvetica"
 
     # Title
     pdf.set_font(font_name, "", 18)
     pdf.set_text_color(30, 30, 50)
-    pdf.multi_cell(0, 10, text_filter(title), align="C")
+    pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(5)
 
     # Disclaimer notice at top
     pdf.set_font(font_name, "", 9)
     pdf.set_text_color(180, 60, 60)
-    pdf.multi_cell(0, 5, text_filter(get_footer_text()))
+    pdf.cell(0, 5, get_footer_text(), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
 
     # Body: parse markdown lines
     pdf.set_text_color(40, 40, 40)
-    MC = {"new_x": "LMARGIN", "new_y": "NEXT"}  # fpdf2 v2.8+ requires explicit
 
     for line in report_text.split("\n"):
         stripped = line.strip()
@@ -91,25 +88,25 @@ def export_report_pdf(
         if stripped.startswith("# "):
             pdf.set_font(font_name, "", 16)
             pdf.ln(4)
-            pdf.cell(0, 8, text_filter(stripped[2:]), **MC)
+            pdf.cell(0, 8, stripped[2:], new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
         elif stripped.startswith("## "):
             pdf.set_font(font_name, "", 13)
             pdf.ln(3)
-            pdf.cell(0, 7, text_filter(stripped[3:]), **MC)
+            pdf.cell(0, 7, stripped[3:], new_x="LMARGIN", new_y="NEXT")
             pdf.ln(1)
         elif stripped.startswith("### "):
             pdf.set_font(font_name, "", 11)
             pdf.ln(2)
-            pdf.cell(0, 6, text_filter(stripped[4:]), **MC)
+            pdf.cell(0, 6, stripped[4:], new_x="LMARGIN", new_y="NEXT")
         elif stripped.startswith("- ") or stripped.startswith("* "):
             pdf.set_font(font_name, "", 10)
             pdf.cell(8, 5, "  ")
-            pdf.cell(0, 5, text_filter("  " + stripped[2:]), **MC)
+            pdf.cell(0, 5, "  " + stripped[2:], new_x="LMARGIN", new_y="NEXT")
         elif stripped.startswith(">"):
             pdf.set_font(font_name, "", 9)
             pdf.set_text_color(100, 100, 100)
-            pdf.cell(0, 5, text_filter(stripped[1:].strip()), **MC)
+            pdf.cell(0, 5, stripped[1:].strip(), new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(40, 40, 40)
         elif stripped == "---":
             pdf.set_draw_color(180, 180, 180)
@@ -119,15 +116,15 @@ def export_report_pdf(
         elif stripped:
             pdf.set_font(font_name, "", 10)
             clean = stripped.replace("**", "").replace("*", "").replace("`", "")
-            pdf.cell(0, 5, text_filter(clean), **MC)
+            pdf.cell(0, 5, clean, new_x="LMARGIN", new_y="NEXT")
         else:
             pdf.ln(3)
 
-    # Custom footer on every page
+    # Footer disclaimer on last page
     pdf.set_y(-15)
     pdf.set_font(font_name, "", 8)
     pdf.set_text_color(128, 128, 128)
-    pdf.cell(0, 10, text_filter(get_pdf_footer_text()), align="C")
+    pdf.cell(0, 10, get_pdf_footer_text(), align="C")
 
     pdf.output(str(output_path))
     return output_path
