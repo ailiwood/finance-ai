@@ -99,8 +99,50 @@ def main() -> None:
     # Ensure config directory exists
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Inject global CSS
+    # Inject global CSS + auto-reconnect JavaScript
     st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
+
+    # Auto-reconnect on WebSocket disconnect (long analyses can trigger timeout)
+    reconnect_js = """
+    <script>
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT = 30;
+
+    function tryReconnect() {
+        if (reconnectAttempts >= MAX_RECONNECT) {
+            console.log('[QuantSage] Max reconnect attempts reached. Please refresh manually.');
+            return;
+        }
+        reconnectAttempts++;
+        fetch(window.location.href, {method: 'HEAD'})
+            .then(r => {
+                if (r.ok) {
+                    console.log('[QuantSage] Server available. Reloading...');
+                    window.location.reload();
+                } else {
+                    setTimeout(tryReconnect, 3000);
+                }
+            })
+            .catch(() => setTimeout(tryReconnect, 3000));
+    }
+
+    // Listen for WebSocket errors (Streamlit uses WebSocket for state sync)
+    window.addEventListener('error', function(e) {
+        if (e.target && (e.target instanceof WebSocket || e.message?.includes('WebSocket'))) {
+            console.log('[QuantSage] WebSocket error detected. Will attempt reconnect...');
+            setTimeout(tryReconnect, 2000);
+        }
+    });
+
+    // Also poll: if page becomes unresponsive, check server
+    setInterval(function() {
+        if (document.hidden) return;
+        fetch(window.location.href, {method: 'HEAD'})
+            .catch(() => setTimeout(tryReconnect, 2000));
+    }, 30000);
+    </script>
+    """
+    st.markdown(reconnect_js, unsafe_allow_html=True)
 
     _init_session()
 

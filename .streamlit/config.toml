@@ -1,0 +1,17 @@
+[server]
+# WebSocket keepalive — prevent disconnect during long analyses
+maxMessageSize = 500
+enableXsrfProtection = true
+enableCORS = false
+
+# Time before the server considers a client disconnected (seconds)
+# Streamlit default is 60s; increase for long-running analysis
+scriptHealthCheckInterval = 300
+
+[browser]
+# Auto-reconnect behavior
+serverAddress = "localhost"
+gatherUsageStats = false
+
+[logger]
+level = "info"
