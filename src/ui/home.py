@@ -54,13 +54,16 @@ STOCK_NAMES = {
 }
 
 
-def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
-    """Run TradingAgents-CN analysis in a background thread. Writes result to file."""
-    import json as _json
-    _result_file = Path("reports/last_result.json")
+# Module-level mailbox for thread-safe result passing
+# Python GIL makes simple assignments atomic across threads.
+# This avoids Streamlit's non-thread-safe st.session_state and file I/O races.
+_ANALYSIS_MAILBOX: dict | None = None
 
+
+def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
+    """Run TradingAgents-CN analysis in background thread. Result goes to _ANALYSIS_MAILBOX."""
+    global _ANALYSIS_MAILBOX
     try:
-        # Fix encoding and proxy for background thread
         os.environ.setdefault("PYTHONIOENCODING", "utf-8")
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
 
@@ -70,8 +73,7 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         config = load_config()
         ds_key = config.get("deepseek_api_key", "") or os.getenv("DEEPSEEK_API_KEY", "")
         if not ds_key:
-            _result_file.parent.mkdir(parents=True, exist_ok=True)
-            _json.dump({"error": "未配置 DeepSeek API Key"}, _result_file.open("w"), ensure_ascii=False)
+            _ANALYSIS_MAILBOX = {"error": "未配置 DeepSeek API Key"}
             return
 
         ta_config = DEFAULT_CONFIG.copy()
@@ -88,31 +90,24 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta = TradingAgentsGraph(debug=False, config=ta_config)
         _, decision = ta.propagate(symbol, "2025-06-18")
 
-        # Extract only serializable fields from decision
-        safe_decision = {}
+        # Extract serializable fields
+        safe_decision: dict = {}
         if isinstance(decision, dict):
             for k, v in decision.items():
                 if isinstance(v, (str, int, float, bool, type(None))):
                     safe_decision[k] = v
-                elif isinstance(v, (list, tuple)):
-                    safe_decision[k] = [x for x in v if isinstance(x, (str, int, float, bool, type(None)))]
                 else:
                     safe_decision[k] = str(v)[:500]
 
-        result = {
+        _ANALYSIS_MAILBOX = {
             "symbol": symbol,
             "stock_name": stock_name,
             "market": market,
             "decision": safe_decision,
-            "raw": str(decision)[:5000] if not isinstance(decision, dict) else "",
-            "completed_at": datetime.now().isoformat(),
         }
-        _result_file.parent.mkdir(parents=True, exist_ok=True)
-        _json.dump(result, _result_file.open("w"), ensure_ascii=False, indent=2)
 
     except Exception as e:
-        _result_file.parent.mkdir(parents=True, exist_ok=True)
-        _json.dump({"error": str(e)}, _result_file.open("w"), ensure_ascii=False)
+        _ANALYSIS_MAILBOX = {"error": str(e)}
 
 
 def show_home() -> None:
@@ -186,7 +181,6 @@ def show_home() -> None:
         st.caption("股票名称未知，将使用代码进行分析")
 
     # Analyze button
-    _result_file = Path("reports/last_result.json")
     analysis_running = st.session_state.get("analysis_running", False)
     analyze_disabled = analysis_running or not symbol
     if st.button("开始分析", type="primary", disabled=analyze_disabled, use_container_width=True, key="analyze_btn"):
@@ -195,11 +189,11 @@ def show_home() -> None:
         elif not key_status.get("deepseek") == ProviderStatus.CONFIGURED:
             st.error("请先配置 DeepSeek API Key（配置向导）")
         else:
-            # Delete old result file and start background analysis
-            if _result_file.exists():
-                _result_file.unlink()
+            global _ANALYSIS_MAILBOX
+            _ANALYSIS_MAILBOX = None
             st.session_state.analysis_running = True
             st.session_state.analysis_result = None
+            st.session_state.analysis_error = None
             thread = threading.Thread(
                 target=_run_analysis,
                 args=(symbol, stock_name or symbol, market_info["market"], depth),
@@ -210,22 +204,19 @@ def show_home() -> None:
 
     # ── Progress display ──
     if st.session_state.get("analysis_running"):
-        # Check if result file exists (thread finished)
-        if _result_file.exists():
-            try:
-                result = json.loads(_result_file.read_text(encoding="utf-8"))
-                if result.get("error"):
-                    st.session_state.analysis_error = result["error"]
-                else:
-                    st.session_state.analysis_result = result
-                st.session_state.analysis_running = False
-                st.rerun()
-            except Exception:
-                pass  # File might be partially written
+        # Check mailbox for result (written by background thread)
+        if _ANALYSIS_MAILBOX is not None:
+            result = _ANALYSIS_MAILBOX
+            if result.get("error"):
+                st.session_state.analysis_error = result["error"]
+            else:
+                st.session_state.analysis_result = result
+            st.session_state.analysis_running = False
+            st.rerun()
 
         st.markdown('<div class="progress-box">', unsafe_allow_html=True)
         st.info("⏳ 正在分析中...")
-        st.caption("分析通常需要 3-5 分钟，请耐心等待。页面每 5 秒自动刷新。")
+        st.caption("分析通常需要 3-5 分钟。页面每 5 秒自动刷新。")
         st.markdown('</div>', unsafe_allow_html=True)
         time.sleep(5)
         st.rerun()
