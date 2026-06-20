@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import sys
 import os
+import json
+import time
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -52,30 +55,26 @@ STOCK_NAMES = {
 
 
 def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
-    """Run TradingAgents-CN analysis in a background thread."""
+    """Run TradingAgents-CN analysis in a background thread. Writes result to file."""
+    import json as _json
+    _result_file = Path("reports/last_result.json")
+
     try:
         # Fix encoding and proxy for background thread
         os.environ.setdefault("PYTHONIOENCODING", "utf-8")
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
 
-        st.session_state.analysis_running = True
-        st.session_state.analysis_progress = "正在初始化分析引擎..."
-        st.session_state.analysis_error = None
-
         from tradingagents.graph.trading_graph import TradingAgentsGraph
         from tradingagents.default_config import DEFAULT_CONFIG
 
-        # Build config from user settings
         config = load_config()
-        ta_config = DEFAULT_CONFIG.copy()
-
-        # DeepSeek
         ds_key = config.get("deepseek_api_key", "") or os.getenv("DEEPSEEK_API_KEY", "")
         if not ds_key:
-            st.session_state.analysis_error = "未配置 DeepSeek API Key。请先完成配置向导。"
-            st.session_state.analysis_running = False
+            _result_file.parent.mkdir(parents=True, exist_ok=True)
+            _json.dump({"error": "未配置 DeepSeek API Key"}, _result_file.open("w"), ensure_ascii=False)
             return
 
+        ta_config = DEFAULT_CONFIG.copy()
         ta_config["llm_provider"] = "deepseek"
         ta_config["backend_url"] = "https://api.deepseek.com"
         ta_config["deep_think_llm"] = "deepseek-chat"
@@ -84,29 +83,25 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config["online_tools"] = False
         ta_config["online_news"] = False
         ta_config["realtime_data"] = False
-
         os.environ["DEEPSEEK_API_KEY"] = ds_key
 
-        st.session_state.analysis_progress = "正在获取数据并启动多智能体分析..."
         ta = TradingAgentsGraph(debug=False, config=ta_config)
-
-        st.session_state.analysis_progress = f"正在分析 {symbol} {stock_name}（{market}）..."
-
         _, decision = ta.propagate(symbol, "2025-06-18")
 
-        st.session_state.analysis_result = {
+        result = {
             "symbol": symbol,
             "stock_name": stock_name,
             "market": market,
             "decision": decision if isinstance(decision, dict) else {},
             "raw": str(decision) if not isinstance(decision, dict) else "",
+            "completed_at": datetime.now().isoformat(),
         }
-        st.session_state.analysis_progress = "分析完成"
+        _result_file.parent.mkdir(parents=True, exist_ok=True)
+        _json.dump(result, _result_file.open("w"), ensure_ascii=False, indent=2)
 
     except Exception as e:
-        st.session_state.analysis_error = str(e)
-    finally:
-        st.session_state.analysis_running = False
+        _result_file.parent.mkdir(parents=True, exist_ok=True)
+        _json.dump({"error": str(e)}, _result_file.open("w"), ensure_ascii=False)
 
 
 def show_home() -> None:
@@ -180,14 +175,20 @@ def show_home() -> None:
         st.caption("股票名称未知，将使用代码进行分析")
 
     # Analyze button
-    analyze_disabled = st.session_state.get("analysis_running", False) or not symbol
+    _result_file = Path("reports/last_result.json")
+    analysis_running = st.session_state.get("analysis_running", False)
+    analyze_disabled = analysis_running or not symbol
     if st.button("开始分析", type="primary", disabled=analyze_disabled, use_container_width=True, key="analyze_btn"):
         if not symbol:
             st.error("请输入股票代码")
         elif not key_status.get("deepseek") == ProviderStatus.CONFIGURED:
             st.error("请先配置 DeepSeek API Key（配置向导）")
         else:
-            # Start background analysis
+            # Delete old result file and start background analysis
+            if _result_file.exists():
+                _result_file.unlink()
+            st.session_state.analysis_running = True
+            st.session_state.analysis_result = None
             thread = threading.Thread(
                 target=_run_analysis,
                 args=(symbol, stock_name or symbol, market_info["market"], depth),
@@ -198,19 +199,25 @@ def show_home() -> None:
 
     # ── Progress display ──
     if st.session_state.get("analysis_running"):
-        st.markdown('<div class="progress-box">', unsafe_allow_html=True)
-        progress_text = st.session_state.get("analysis_progress", "分析中...")
-        st.info(f"⏳ {progress_text}")
-        st.caption("分析通常需要 3-5 分钟，请耐心等待...")
-        st.markdown('</div>', unsafe_allow_html=True)
-        import time; time.sleep(3)
-        st.rerun()
+        # Check if result file exists (thread finished)
+        if _result_file.exists():
+            try:
+                result = json.loads(_result_file.read_text(encoding="utf-8"))
+                if result.get("error"):
+                    st.session_state.analysis_error = result["error"]
+                else:
+                    st.session_state.analysis_result = result
+                st.session_state.analysis_running = False
+                st.rerun()
+            except Exception:
+                pass  # File might be partially written
 
-    # Auto-detect: analysis just finished but results not yet shown
-    if st.session_state.get("analysis_result") and not st.session_state.get("analysis_running"):
-        if not st.session_state.get("_results_shown"):
-            st.session_state._results_shown = True
-            st.rerun()
+        st.markdown('<div class="progress-box">', unsafe_allow_html=True)
+        st.info("⏳ 正在分析中...")
+        st.caption("分析通常需要 3-5 分钟，请耐心等待。页面每 5 秒自动刷新。")
+        st.markdown('</div>', unsafe_allow_html=True)
+        time.sleep(5)
+        st.rerun()
 
     # ── Error display ──
     if st.session_state.get("analysis_error"):
