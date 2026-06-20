@@ -16,6 +16,7 @@ LABEL org.opencontainers.image.source="https://github.com/ailiwood/finance-ai"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

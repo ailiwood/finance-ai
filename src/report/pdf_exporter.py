@@ -18,18 +18,32 @@ from src.compliance.disclaimer import get_pdf_footer_text, get_footer_text
 
 
 # Unicode CJK font path (auto-detect, prefer single TTF over TTC)
+import re
+
 _CJK_FONT_PATH = None
 for _candidate in [
-    "C:/Windows/Fonts/simhei.ttf",     # 黑体 (Windows, single TTF)
-    "C:/Windows/Fonts/simfang.ttf",    # 仿宋
-    "C:/Windows/Fonts/simkai.ttf",     # 楷体
-    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux
-    "/System/Library/Fonts/PingFang.ttc",  # macOS
+    # Project-bundled font (users can place any CJK .ttf here)
+    Path(__file__).resolve().parent / "fonts" / "cjk_font.ttf",
+    # Windows single TTF fonts (avoid .ttc collections)
+    "C:/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/simfang.ttf",
+    "C:/Windows/Fonts/simkai.ttf",
+    # Linux (Docker: apt install fonts-noto-cjk)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    # macOS
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
 ]:
     if Path(_candidate).exists():
-        _CJK_FONT_PATH = _candidate
+        _CJK_FONT_PATH = str(_candidate)
         break
+
+
+def _clean_emoji(text: str) -> str:
+    """Remove emoji and special symbols that CJK fonts lack."""
+    return re.sub(r'[\U0001F300-\U0001F9FF☀-➿︀-️─-╿]', '', text)
 
 
 def export_report_pdf(
@@ -37,18 +51,13 @@ def export_report_pdf(
     output_path: str | Path,
     title: str = "QuantSage 研究报告",
 ) -> Path:
-    """Export a report to PDF with disclaimer footer on every page.
-
-    Args:
-        report_text: Report content.
-        output_path: Output PDF file path.
-        title: Report title.
-
-    Returns:
-        Path to the generated PDF file.
-    """
+    """Export a report to PDF with disclaimer footer on every page."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Clean emoji/special chars that CJK fonts lack
+    report_text = _clean_emoji(report_text)
+    title = _clean_emoji(title)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
