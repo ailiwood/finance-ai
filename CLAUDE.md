@@ -112,15 +112,13 @@ quantsage/
 - [x] **M3 Kronos 插件（GPU 可选）** — FastAPI 微服务 + GPU 检测 + 统计降级 ✅ (2025-06-20)
 - [x] **M4 FinBERT 情绪插件** — 情绪打分 + 批量新闻评分 + 情绪指数 ✅ (2025-06-21)
 - [x] **M5 报告 + 合规** — 报告模板 + PDF 导出 + 合规扫描 ✅ (2025-06-21)
-- [ ] **M6 方案 A 可分发** ← *当前*
-- [ ] M6 方案 A 可分发（阶段一终点）
-- [ ] **M7 方案 B**（Windows 安装包，商用化；M6 稳定后再启动）
+- [x] **M6 方案 A 可分发** — Docker Compose + GPU profiles + 安装指南 ✅ (2025-06-21)
+- [ ] **M7 方案 B**（Windows 安装包，商用化）← *阶段二，M6 稳定后启动*
 
-**下一步**：M5 —— 报告模板 + PDF 导出 + 合规扫描
+**阶段一完成！** 仓库: https://github.com/ailiwood/finance-ai
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
 **已知问题**：
-- Docker 完整构建（backend+frontend）因前端 yarn 平台依赖问题未通过；本地 Python 直连方式已验证可用
-- pip/conda 使用清华镜像源，需 Clash 代理绕过（NO_PROXY）
+- fpdf2 为 LGPLv3 许可证，如需完全合规可替换为 reportlab (BSD)
 - M2 加密密钥存储在 ~/.quantsage/.fernet_key，Windows 下无法 chmod 限制权限
 
 ---
