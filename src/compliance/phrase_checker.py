@@ -167,6 +167,16 @@ def scan_project(root: Path | None = None) -> List[ComplianceViolation]:
     exclude_dirs = {
         ".git", ".claude", "__pycache__", "venv", ".venv",
         "node_modules", ".tox", "dist", "build", "cache",
+        "tests",  # test files contain banned phrases for validation
+    }
+    # Files that document or define compliance rules (false positives)
+    exclude_files = {
+        "CLAUDE.md",           # documents red lines as examples
+        "DISCLAIMER.md",       # defines banned phrase list in 违规措辞清单
+        "CC_INIT_PROMPT.md",   # Claude Code init template
+        "TESTING.md",          # testing guide referencing banned phrases
+        "disclaimer.py",       # parses banned phrase definitions
+        "phrase_checker.py",   # compliance scanner source
     }
     scan_extensions = {".py", ".md", ".txt"}
 
@@ -175,6 +185,10 @@ def scan_project(root: Path | None = None) -> List[ComplianceViolation]:
     for filepath in root.rglob("*"):
         # Skip excluded directories
         if any(excl in filepath.parts for excl in exclude_dirs):
+            continue
+
+        # Skip compliance definition and documentation files
+        if filepath.name in exclude_files:
             continue
 
         if filepath.suffix in scan_extensions and filepath.is_file():
