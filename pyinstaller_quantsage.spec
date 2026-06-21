@@ -1,34 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""QuantSage PyInstaller Spec File.
-
-Builds the base QuantSage.exe without GPU dependencies.
-GPU plugins (torch, transformers) are separate optional components.
-
-Build command:
-    pyinstaller pyinstaller_quantsage.spec --clean --noconfirm
-"""
+"""QuantSage PyInstaller Spec File — single-file exe with all dependencies."""
 
 import os
 
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
-# SPECPATH is a built-in PyInstaller variable pointing to the .spec file directory
 spec_dir = SPECPATH  # noqa: F821
-
-# TradingAgents-CN path (sibling directory, bundled into exe)
 ta_cn_dir = os.path.join(os.path.dirname(spec_dir), 'TradingAgents-CN')
 
 app_name = "QuantSage"
 exe_name = "QuantSage_v1.0.0"
 
 # ── Collect complete packages (code + static assets + metadata) ──
-# Using collect_all ensures frontend static files (HTML/JS/CSS) are bundled.
-# Without these, Streamlit's browser UI shows "NOT FOUND".
 _all_datas = []
 _all_binaries = []
 _all_hidden = []
 
-for _pkg in ["streamlit", "altair", "pydeck"]:
+for _pkg in ["streamlit", "altair", "pydeck", "chromadb"]:
     d, b, h = collect_all(_pkg)
     _all_datas.extend(d)
     _all_binaries.extend(b)
@@ -48,14 +36,12 @@ for _mp in _metadata_pkgs:
 _own_datas = [
     ("DISCLAIMER.md", "."),
     (".env.example", "."),
-    (os.path.join(spec_dir, "run_app.py"), "."),
-    (os.path.join(spec_dir, "st_test.py"), "."),
     (os.path.join(spec_dir, "src"), "src"),
-    # Bundle TradingAgents-CN (Apache 2.0) directly — no separate install needed
+    # Bundle TradingAgents-CN (Apache 2.0 core) — no separate install needed
     (os.path.join(ta_cn_dir, "tradingagents"), "tradingagents"),
 ]
 
-# ── Hidden imports that collect_all may miss ──
+# ── Hidden imports ──
 _extra_hidden = [
     # FastAPI + Uvicorn
     "fastapi", "uvicorn", "uvicorn.loops", "uvicorn.loops.auto",
@@ -71,14 +57,17 @@ _extra_hidden = [
     "langchain", "langchain_openai", "langgraph", "langsmith",
     "langchain_core", "langchain_core.messages", "langchain_core.prompts",
 
-    # QuantSage modules
-        # TradingAgents-CN (bundled, Apache 2.0)
-        "tradingagents", "tradingagents.graph", "tradingagents.graph.trading_graph",
-        "tradingagents.default_config", "tradingagents.agents", "tradingagents.config",
-        "tradingagents.constants", "tradingagents.dataflows", "tradingagents.llm_adapters",
-        "tradingagents.llm_clients", "tradingagents.models", "tradingagents.tools",
-        "tradingagents.utils", "tradingagents.api",
+    # TradingAgents-CN (bundled, Apache 2.0)
+    "tradingagents", "tradingagents.graph", "tradingagents.graph.trading_graph",
+    "tradingagents.default_config", "tradingagents.agents", "tradingagents.config",
+    "tradingagents.constants", "tradingagents.dataflows", "tradingagents.llm_adapters",
+    "tradingagents.llm_clients", "tradingagents.models", "tradingagents.tools",
+    "tradingagents.utils", "tradingagents.api",
 
+    # TA-CN data dependencies
+    "yfinance", "stockstats", "pymongo",
+
+    # QuantSage modules
     "src", "src.core", "src.core.config_manager",
     "src.ui", "src.ui.app", "src.ui.home",
     "src.ui.config_wizard", "src.ui.disclaimer_gate", "src.ui.plugin_manager",
@@ -108,7 +97,7 @@ a = Analysis(
     pathex=[
         spec_dir,
         os.path.join(spec_dir, "src"),
-        ta_cn_dir,  # TradingAgents-CN
+        ta_cn_dir,
     ],
 
     binaries=_all_binaries,
@@ -122,7 +111,6 @@ a = Analysis(
         os.path.join(spec_dir, 'pyi_rthook_streamlit_static.py'),
     ],
 
-    # Exclude GPU-heavy packages from base exe
     excludes=[
         # GPU / ML (optional plugin packs)
         "torch", "torchvision", "torchaudio",
@@ -139,8 +127,9 @@ a = Analysis(
         # Testing (not needed at runtime)
         "pytest", "unittest",
 
-        # External database drivers (not needed)
-        "psycopg2", "pymongo", "redis",
+        # External database drivers (not directly needed)
+        "psycopg2", "redis",
+        # NOTE: pymongo is NOT excluded — TradingAgents-CN uses it
     ],
 )
 

@@ -12,6 +12,14 @@ It runs early in the PyInstaller bootstrap process.
 import os
 import sys
 
+# Fix GBK encoding: Chinese Windows console can't handle emoji in log messages.
+# This MUST run before any TradingAgents-CN code that logs emoji (🔧🔍⚠️).
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+if sys.stdout.encoding and sys.stdout.encoding.lower() in ("gbk", "cp936", "cp950"):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 
 def _patch() -> None:
     if not getattr(sys, "frozen", False) or not hasattr(sys, "_MEIPASS"):
