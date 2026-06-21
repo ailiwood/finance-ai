@@ -40,6 +40,8 @@ _own_datas = [
     ("DISCLAIMER.md", "."),
     (".env.example", "."),
     (os.path.join(spec_dir, "src"), "src"),
+    # User-provided assets
+    (os.path.join(spec_dir, "src", "ui", "assets"), os.path.join("src", "ui", "assets")),
     # Bundle TradingAgents-CN (Apache 2.0 core) — no separate install needed
     (os.path.join(ta_cn_dir, "tradingagents"), "tradingagents"),
 ]
@@ -159,7 +161,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="installer/assets/quantsage.ico",
+    icon="src/ui/assets/logo.ico",
 )
 
 coll = COLLECT(

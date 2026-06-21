@@ -34,7 +34,7 @@ PrivilegesRequired=lowest
 ; Output
 OutputDir=..\dist\installer
 OutputBaseFilename=QuantSage_Setup_v{#AppVersion}
-SetupIconFile=assets\quantsage.ico
+SetupIconFile=..\src\ui\assets\logo.ico
 WizardImageFile=assets\wizard.bmp
 WizardSmallImageFile=assets\wizard_small.bmp
 

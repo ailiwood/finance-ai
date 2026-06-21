@@ -73,13 +73,36 @@ header {visibility: hidden;}
 
 .stApp {
     background-color: #0a0e1a;
+    background-image: url('/app/static/src/ui/assets/banner_bg.png');
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     color: #e8eaed;
 }
 
 /* ── Typography ── */
-h1, h2, h3, h4, h5, h6 { color: #e8eaed !important; }
-p, li, span, div { color: #d1d5db; }
+h1, h2, h3, h4, h5, h6 { color: #e8eaed !important; font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
+h1 { font-size: 2rem; font-weight: 700; }
+h2 { font-size: 1.5rem; font-weight: 600; border-bottom: 1px solid #1f2937; padding-bottom: 0.5rem; }
+p, li, span, div { color: #d1d5db; font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif; }
 .stCaption { color: #9ca3af !important; }
+
+/* ── Cards ── */
+.quantsage-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+.quantsage-card-header {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600; font-size: 1.1rem; color: #e8eaed;
+}
+.quantsage-card-header img { width: 24px; height: 24px; }
+.quantsage-card-number { font-size: 1.4rem; font-weight: 700; color: #22d3ee; }
 
 /* ── Buttons ── */
 .stButton > button {
