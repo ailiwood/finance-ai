@@ -199,7 +199,7 @@ def _show_step_llm() -> None:
             if not api_key:
                 st.error("请先输入 API Key")
             elif not validate_api_key(provider, api_key):
-                st.error("API Key 格式不正确（应以 sk- 开头，长度至少 20 字符）")
+                st.error("API Key 为空或仍为占位符，请填写真实密钥")
             else:
                 with st.spinner("正在测试连接..."):
                     success, msg = test_llm_connection(provider, api_key)

@@ -323,31 +323,26 @@ def save_config(config: QuantSageConfig) -> None:
 # === Key validation ===
 
 def validate_api_key(provider: str, key: str) -> bool:
-    """Format-validate an API key. Does NOT make network calls.
+    """Minimal key validation — only reject empty or placeholder keys.
 
-    Rules:
-    - DeepSeek: must start with 'sk-', minimum 20 chars
-    - DashScope: must start with 'sk-', minimum 20 chars
-    - Tushare: minimum 10 chars
+    Different providers have DIFFERENT key formats (sk-/ak-/Bearer/...).
+    We do NOT guess format — real validity is determined by actual API call.
     """
     if not key or not key.strip():
         return False
 
-    # Reject placeholder keys
+    # Only reject obvious placeholder/default values
     placeholder_markers = ["your_", "your-", "_here", "-here", "..."]
     key_lower = key.lower()
     if any(marker in key_lower for marker in placeholder_markers):
         return False
 
-    if provider in ("deepseek", "dashscope"):
-        if not key.startswith("sk-"):
-            return False
-        if len(key) < 20:
-            return False
-    elif provider == "tushare":
-        if len(key) < 10:
-            return False
+    # Tushare: basic sanity check (token is typically 20+ chars)
+    if provider == "tushare" and len(key.strip()) < 10:
+        return False
 
+    # All other providers: any non-empty, non-placeholder key is accepted.
+    # Real validity is tested via the "test connection" API call.
     return True
 
 
