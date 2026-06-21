@@ -7,6 +7,21 @@ Launch: streamlit run src/ui/app.py
 
 from __future__ import annotations
 
+import os as _os, sys as _sys, time as _time
+from pathlib import Path as _Path
+
+# Execution marker for frozen-mode debugging
+_marker = _Path(_os.environ.get("TEMP", "/tmp")) / "quantsage_app_executed.txt"
+try:
+    _marker.write_text(
+        f"{_time.strftime('%H:%M:%S')} app.py EXECUTED\n"
+        f"frozen={getattr(_sys, 'frozen', False)}\n"
+        f"python={_sys.executable}\n"
+        f"path={_sys.path[:5]}\n"
+    )
+except Exception:
+    pass
+
 import sys
 from pathlib import Path
 
