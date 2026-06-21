@@ -255,9 +255,9 @@ def show_home() -> None:
 
         st.markdown('<div class="progress-box">', unsafe_allow_html=True)
         st.info("⏳ 正在分析中...")
-        st.caption("分析通常需要 3-5 分钟。页面每 5 秒自动刷新。")
+        st.caption("分析通常需要 3-5 分钟。页面每 2 秒自动刷新。")
         st.markdown('</div>', unsafe_allow_html=True)
-        time.sleep(5)
+        time.sleep(2)
         st.rerun()
 
     # ── Error display ──

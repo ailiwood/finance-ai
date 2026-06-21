@@ -114,6 +114,8 @@ def _run_server_mode(script_path: str, port: int) -> None:
     _config.set_option("browser.serverAddress", "127.0.0.1")
     _config.set_option("browser.serverPort", port)
     _config.set_option("browser.gatherUsageStats", False)
+    # Long analysis support — keep WebSocket alive during LLM calls
+    _config.set_option("server.websocketPingInterval", 60)
 
     flag_options = {
         "global_development_mode": False,
@@ -124,6 +126,7 @@ def _run_server_mode(script_path: str, port: int) -> None:
         "browser_server_address": "127.0.0.1",
         "browser_server_port": port,
         "gather_usage_stats": False,
+        "websocket_ping_interval": 60,
     }
 
     try:
@@ -224,10 +227,30 @@ def main() -> int:
         return 1
     print(" OK")
 
-    # Open browser
+    # Open browser (try multiple methods — webbrowser sometimes fails silently)
     if not args.no_browser:
         print(f"[QuantSage] Opening {url}", flush=True)
-        webbrowser.open(url)
+        opened = False
+        # Method 1: webbrowser module
+        try:
+            opened = webbrowser.open(url)
+        except Exception:
+            pass
+        # Method 2: Windows os.startfile (most reliable on Windows)
+        if not opened and sys.platform == "win32":
+            try:
+                os.startfile(url)
+                opened = True
+            except Exception:
+                pass
+        # Method 3: subprocess cmd start
+        if not opened and sys.platform == "win32":
+            try:
+                subprocess.run(["cmd", "/c", "start", url], capture_output=True)
+            except Exception:
+                pass
+        if not opened:
+            print(f"[QuantSage] Could not open browser. Please visit: {url}", flush=True)
 
     print(f"[QuantSage] Running at {url}. Press Ctrl+C to stop.\n", flush=True)
 

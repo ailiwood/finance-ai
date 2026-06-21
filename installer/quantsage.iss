@@ -72,10 +72,12 @@ Name: "finbert"; Description: "FinBERT Sentiment Engine (~3.3GB)"; Types: full; 
 
 ; ─── Shortcuts ───
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"
+Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; \
+    Flags: useapppaths
 Name: "{group}\访问官网"; Filename: "{#AppURL}"
 Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"
+; Desktop shortcut disabled — causes IPersistFile::Save access denied on some Windows configs
+; Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"
 
 ; ─── Post-install Actions ───
 [Run]
