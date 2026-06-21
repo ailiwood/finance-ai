@@ -83,7 +83,7 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
 
         config = load_config()
-        ds_key = config.get("deepseek_api_key", "") or os.getenv("DEEPSEEK_API_KEY", "")
+        ds_key = (config.get("deepseek_api_key", "") or os.getenv("DEEPSEEK_API_KEY", "")).strip()
         if not ds_key:
             _ANALYSIS_MAILBOX = {"error": "未配置 DeepSeek API Key"}
             return
