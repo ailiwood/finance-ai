@@ -18,21 +18,10 @@ import streamlit as st
 from src.core.config_manager import load_config, get_key_status, ProviderStatus
 from src.compliance.disclaimer import get_ui_disclaimer
 
-# Ensure TradingAgents-CN is on path (external dependency)
-# When installed via pip, it's on sys.path already.
-# When running from source, look in sibling directory.
-_TA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "TradingAgents-CN"
-if _TA_PATH.is_dir() and str(_TA_PATH) not in sys.path:
-    sys.path.insert(0, str(_TA_PATH))
-
-# Check TradingAgents-CN availability
-_TA_AVAILABLE = False
-try:
-    from tradingagents.graph.trading_graph import TradingAgentsGraph
-    from tradingagents.default_config import DEFAULT_CONFIG
-    _TA_AVAILABLE = True
-except ImportError:
-    pass
+# TradingAgents-CN is bundled directly in the exe — always available
+from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.default_config import DEFAULT_CONFIG
+_TA_AVAILABLE = True
 
 CSS_HOME = """
 <style>
@@ -74,9 +63,6 @@ _ANALYSIS_MAILBOX: dict | None = None
 def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
     """Run TradingAgents-CN analysis in background thread. Result goes to _ANALYSIS_MAILBOX."""
     global _ANALYSIS_MAILBOX
-    if not _TA_AVAILABLE:
-        _ANALYSIS_MAILBOX = {"error": "TradingAgents-CN 未安装。请在终端运行: pip install git+https://github.com/hsliuping/TradingAgents-CN.git@v1.0.1"}
-        return
     try:
         os.environ.setdefault("PYTHONIOENCODING", "utf-8")
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
@@ -172,7 +158,7 @@ def show_home() -> None:
         st.caption(f"插件: {'Kronos ✅' if k_on else 'Kronos ⬜'} | {'FinBERT ✅' if f_on else 'FinBERT ⬜'}")
 
     # ── System Status Panel ──
-    with st.expander("系统状态", expanded=not _TA_AVAILABLE):
+    with st.expander("系统状态", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
             # GPU
@@ -185,12 +171,8 @@ def show_home() -> None:
                     st.caption("⬜ GPU: 未检测到（将使用统计基线引擎）")
             except Exception:
                 st.caption("⬜ GPU: 检测不可用")
-            # TA engine
-            if _TA_AVAILABLE:
-                st.markdown(f'<span style="color:#4caf50;">✅ 分析引擎: TradingAgents-CN</span>', unsafe_allow_html=True)
-            else:
-                st.warning("❌ 分析引擎: 未安装 TradingAgents-CN")
-                st.caption("请在终端运行: pip install git+https://github.com/hsliuping/TradingAgents-CN.git@v1.0.1")
+            # TA engine (bundled)
+            st.markdown(f'<span style="color:#4caf50;">✅ 分析引擎: TradingAgents-CN</span>', unsafe_allow_html=True)
         with col2:
             # Network
             try:
@@ -239,14 +221,10 @@ def show_home() -> None:
 
     # Analyze button
     analysis_running = st.session_state.get("analysis_running", False)
-    analyze_disabled = analysis_running or not symbol or not _TA_AVAILABLE
-    if not _TA_AVAILABLE:
-        st.caption("⚠️ 需要安装 TradingAgents-CN 才能分析。请参阅安装指南。")
+    analyze_disabled = analysis_running or not symbol
     if st.button("开始分析", type="primary", disabled=analyze_disabled, use_container_width=True, key="analyze_btn"):
         if not symbol:
             st.error("请输入股票代码")
-        elif not _TA_AVAILABLE:
-            st.error("TradingAgents-CN 未安装。请在终端运行: pip install git+https://github.com/hsliuping/TradingAgents-CN.git@v1.0.1")
         elif not key_status.get("deepseek") == ProviderStatus.CONFIGURED:
             st.error("请先配置 DeepSeek API Key（配置向导）")
         else:

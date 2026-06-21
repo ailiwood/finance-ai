@@ -44,6 +44,15 @@ def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
             return False
 
 
+def find_available_port(start: int = DEFAULT_PORT, max_attempts: int = 100) -> int:
+    """Find the first available port starting from `start`."""
+    for offset in range(max_attempts):
+        port = start + offset
+        if is_port_available(port):
+            return port
+    raise RuntimeError(f"No available ports from {start} to {start + max_attempts}")
+
+
 def wait_for_server(port: int, timeout: int = HEALTH_CHECK_TIMEOUT) -> bool:
     """Poll /_stcore/health until HTTP 200."""
     url = f"http://127.0.0.1:{port}/_stcore/health"

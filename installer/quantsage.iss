@@ -79,12 +79,6 @@ Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.ex
 
 ; ─── Post-install Actions ───
 [Run]
-; Install TradingAgents-CN from GitHub
-Filename: "{cmd}"; Parameters: "/C ""pip install git+https://github.com/hsliuping/TradingAgents-CN.git@v1.0.1"""; \
-    Flags: runhidden waituntilterminated; \
-    StatusMsg: "Installing TradingAgents-CN analysis engine..."; \
-    Components: core
-
 ; Launch QuantSage after install
 Filename: "{app}\QuantSage_v{#AppVersion}.exe"; \
     Description: "启动 {#AppName}"; \

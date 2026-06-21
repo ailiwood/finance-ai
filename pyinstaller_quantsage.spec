@@ -15,6 +15,9 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 # SPECPATH is a built-in PyInstaller variable pointing to the .spec file directory
 spec_dir = SPECPATH  # noqa: F821
 
+# TradingAgents-CN path (sibling directory, bundled into exe)
+ta_cn_dir = os.path.join(os.path.dirname(spec_dir), 'TradingAgents-CN')
+
 app_name = "QuantSage"
 exe_name = "QuantSage_v1.0.0"
 
@@ -48,6 +51,8 @@ _own_datas = [
     (os.path.join(spec_dir, "run_app.py"), "."),
     (os.path.join(spec_dir, "st_test.py"), "."),
     (os.path.join(spec_dir, "src"), "src"),
+    # Bundle TradingAgents-CN (Apache 2.0) directly — no separate install needed
+    (os.path.join(ta_cn_dir, "tradingagents"), "tradingagents"),
 ]
 
 # ── Hidden imports that collect_all may miss ──
@@ -67,6 +72,13 @@ _extra_hidden = [
     "langchain_core", "langchain_core.messages", "langchain_core.prompts",
 
     # QuantSage modules
+        # TradingAgents-CN (bundled, Apache 2.0)
+        "tradingagents", "tradingagents.graph", "tradingagents.graph.trading_graph",
+        "tradingagents.default_config", "tradingagents.agents", "tradingagents.config",
+        "tradingagents.constants", "tradingagents.dataflows", "tradingagents.llm_adapters",
+        "tradingagents.llm_clients", "tradingagents.models", "tradingagents.tools",
+        "tradingagents.utils", "tradingagents.api",
+
     "src", "src.core", "src.core.config_manager",
     "src.ui", "src.ui.app", "src.ui.home",
     "src.ui.config_wizard", "src.ui.disclaimer_gate", "src.ui.plugin_manager",
@@ -96,6 +108,7 @@ a = Analysis(
     pathex=[
         spec_dir,
         os.path.join(spec_dir, "src"),
+        ta_cn_dir,  # TradingAgents-CN
     ],
 
     binaries=_all_binaries,
