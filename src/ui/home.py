@@ -409,6 +409,17 @@ def show_home() -> None:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # ── Data Inspection Toggle ──
+    if st.session_state.get("show_data_inspection", False):
+        from src.ui.data_inspection import show_data_inspection
+        show_data_inspection()
+        st.markdown(f'<div class="disclaimer-footer">{get_ui_disclaimer()}</div>', unsafe_allow_html=True)
+        if st.button("← 返回首页", key="back_home_inspect"):
+            st.session_state.show_data_inspection = False
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
     # ── Plugin Manager Toggle ──
     if st.session_state.get("show_plugin_manager", False):
         from src.ui.plugin_manager import show_plugin_manager
@@ -421,13 +432,17 @@ def show_home() -> None:
         return
 
     # ── Bottom actions ──
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("重新配置", use_container_width=True, key="reconfig_btn"):
             st.session_state.config_complete = False
             st.session_state.wizard_step = 0
             st.rerun()
     with col2:
+        if st.button("数据体检", use_container_width=True, key="data_inspect_btn"):
+            st.session_state.show_data_inspection = True
+            st.rerun()
+    with col3:
         if st.button("合规扫描", use_container_width=True, key="compliance_btn"):
             from src.compliance.phrase_checker import scan_project
             violations = scan_project()
@@ -437,11 +452,11 @@ def show_home() -> None:
                     st.caption(f"- {v.phrase}")
             else:
                 st.success("合规扫描通过")
-    with col3:
+    with col4:
         if st.button("插件管理", use_container_width=True, key="plugin_mgr_btn"):
             st.session_state.show_plugin_manager = True
             st.rerun()
-    with col4:
+    with col5:
         if st.button("重置配置", type="secondary", use_container_width=True, key="reset_btn"):
             from src.core.config_manager import clear_config
             clear_config()

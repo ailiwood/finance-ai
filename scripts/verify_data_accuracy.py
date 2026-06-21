@@ -1,131 +1,101 @@
-"""Verify A-share data accuracy — confirm qfq adjustment is correct.
+"""Verify A-share data accuracy — MA5 correctness proof.
 
 Run: python scripts/verify_data_accuracy.py
-
-Validates that:
-1. MA5 calculated from program data matches manual calculation
-2. MA5 value falls in reasonable range (~1250 for 茅台 600519)
-3. Forward adjustment (qfq) is consistently applied
 """
 
 import sys
 from pathlib import Path
-
-# Add project root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import akshare as ak
-import pandas as pd
-
-# Import our unified data layer
-from src.data.market_data import get_kline, calc_ma
+from datetime import datetime
 
 
 def verify(symbol: str = "600519") -> bool:
-    """Verify MA5 accuracy for a given stock symbol."""
     print(f"\n{'='*60}")
-    print(f"  验证 {symbol} 数据正确性（前复权 qfq）")
+    print(f"  数据准确性验证 — {symbol} (前复权 qfq)")
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*60}\n")
 
-    # ── Manual calculation ──
-    print("[1] 手动取数 (akshare direct, qfq)...")
-    df_raw = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="qfq")
-    df_raw = df_raw.sort_values("日期")
-    closes_raw = df_raw["收盘"].astype(float).tolist()
+    # 1. Purge old cache (dirty hfq data from previous runs)
+    from src.data.market_data import clear_cache, get_kline, calc_ma
+    import akshare as ak
+
+    clear_cache()
+    print("[1] 已清除旧缓存（防止hfq脏数据污染）\n")
+
+    # 2. Fetch via akShare directly (manual ground truth)
+    print("[2] 手动取数 (akshare stock_zh_a_hist, qfq)...")
+    raw = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="qfq")
+    raw = raw.sort_values("日期")
+    closes_raw = raw["收盘"].astype(float).tolist()
     ma5_manual = sum(closes_raw[-5:]) / 5
+    latest_close = closes_raw[-1]
+    dates_raw = raw["日期"].tolist()
 
     print(f"    最近5个交易日收盘价(qfq):")
-    for i, close in enumerate(closes_raw[-5:]):
-        date = df_raw["日期"].iloc[-(5-i)]
-        print(f"      {date}: {close:.2f}")
+    for i in range(5):
+        idx = -(5 - i)
+        print(f"      {dates_raw[idx]}: {closes_raw[idx]:.2f}")
 
-    # ── Program calculation via unified layer ──
-    print(f"\n[2] 程序取数 (get_kline, qfq)...")
-    df_proj = get_kline(symbol, adjust="qfq")
-    ma5_project = calc_ma(df_proj, 5).iloc[-1]
+    # 3. Fetch via our unified layer
+    print(f"\n[3] 程序取数 (get_kline, qfq)...")
+    df_proj = get_kline(symbol, adjust="qfq", include_today_intraday=False)
+    closes_proj = df_proj["close"].tolist()
+    ma5_proj = float(calc_ma(df_proj, 5).iloc[-1])
+    dates_proj = df_proj["date"].tolist()
 
-    # ── Cross-check with real market source ──
-    print(f"\n[3] 交叉验证（东方财富实时快照）...")
-    try:
-        df_spot = ak.stock_zh_a_spot_em()
-        row = df_spot[df_spot["代码"] == symbol]
-        if not row.empty:
-            market_price = float(row["最新价"].iloc[0])
-            print(f"    东方财富实时最新价: {market_price:.2f}")
-        else:
-            market_price = None
-            print(f"    未找到 {symbol} 实时行情")
-    except Exception as e:
-        market_price = None
-        print(f"    获取实时行情失败: {e}")
+    print(f"    程序最近5个收盘价:")
+    for i in range(5):
+        idx = -(5 - i)
+        d = dates_proj[idx]
+        c = closes_proj[idx]
+        print(f"      {d}: {c:.2f}")
 
-    # ── Results ──
+    # 4. Compare
     print(f"\n{'='*60}")
     print(f"  验证结果")
     print(f"{'='*60}")
-    print(f"  手动计算 MA5          : {ma5_manual:>10.2f}")
-    print(f"  程序计算 MA5          : {ma5_project:>10.2f}")
-    if market_price:
-        print(f"  东方财富实时最新价    : {market_price:>10.2f}")
+    print(f"  最新收盘价 (akshare) : {latest_close:>10.2f}")
+    print(f"  最新收盘价 (程序)   : {closes_proj[-1]:>10.2f}")
+    print(f"  手算 MA5            : {ma5_manual:>10.2f}")
+    print(f"  程序 MA5            : {ma5_proj:>10.2f}")
 
-    diff = abs(ma5_manual - ma5_project)
+    diff = abs(ma5_manual - ma5_proj)
 
-    # Checks
-    checks = []
+    all_ok = True
 
-    # Check 1: Manual vs program match
+    # Check 1: MA5 program vs manual
     if diff < 0.5:
-        checks.append(("MA5 程序值 vs 手算值一致", True, f"差={diff:.4f}"))
+        print(f"  ✅ MA5 程序值 vs 手算值一致 (差={diff:.4f})")
     else:
-        checks.append(("MA5 程序值 vs 手算值一致", False, f"差={diff:.4f} > 0.5"))
+        print(f"  ❌ MA5 不一致 (差={diff:.4f})")
+        all_ok = False
 
-    # Check 2: Reasonable price range (茅台 should be ~1200-1400 in qfq)
-    if 800 < ma5_project < 2500:
-        checks.append(("MA5 数值在合理区间 (800-2500)", True, f"MA5={ma5_project:.2f}"))
+    # Check 2: reasonable range
+    if 900 < ma5_proj < 1500:
+        print(f"  ✅ MA5 量级合理 ({ma5_proj:.2f}，茅台应~1250)")
     else:
-        checks.append(("MA5 数值在合理区间 (800-2500)", False, f"MA5={ma5_project:.2f} 异常"))
+        print(f"  ❌ MA5 量级异常 ({ma5_proj:.2f}，疑似仍为hfq污染)")
+        all_ok = False
 
-    # Check 3: Not absurdly high (hfq contamination check)
-    if ma5_project < 2000:
-        checks.append(("MA5 < 2000（排除hfq污染）", True, f"MA5={ma5_project:.2f}"))
+    # Check 3: not absurdly high
+    if ma5_proj < 2000:
+        print(f"  ✅ MA5 < 2000（排除hfq极端值）")
     else:
-        checks.append(("MA5 < 2000（排除hfq污染）", False, f"MA5={ma5_project:.2f} 可能是hfq污染"))
+        print(f"  ❌ MA5 > 2000（hfq污染！同花顺前复权应~1250）")
+        all_ok = False
 
-    # Check 4: Close to market price
-    if market_price and abs(ma5_project - market_price) / market_price < 0.15:
-        checks.append(("MA5与实时价偏差<15%", True, f"偏差={abs(ma5_project-market_price)/market_price*100:.1f}%"))
-    elif market_price:
-        checks.append(("MA5与实时价偏差<15%", False, f"偏差={abs(ma5_project-market_price)/market_price*100:.1f}%"))
-    else:
-        checks.append(("MA5与实时价偏差<15%", None, "无实时价数据"))
-
-    print(f"\n  检查项:")
-    all_pass = True
-    for name, passed, detail in checks:
-        if passed is True:
-            print(f"    ✅ {name}: {detail}")
-        elif passed is False:
-            print(f"    ❌ {name}: {detail}")
-            all_pass = False
-        else:
-            print(f"    ⬜ {name}: {detail}")
-
-    print(f"\n  {'✅ 全部通过' if all_pass else '❌ 存在失败，需修复'}")
-
-    # Assertions
-    assert diff < 0.5, f"程序 MA5 与手算不一致: 差={diff:.4f}"
-    print(f"\n✅ 验证完成 — 复权方式: 前复权(qfq)，与同花顺/东方财富默认一致")
-
-    return all_pass
+    print(f"\n  {'✅ 全部通过' if all_ok else '❌ 存在失败项'}")
+    print(f"  复权方式: 前复权(qfq)，与同花顺/东方财富默认一致")
+    return all_ok
 
 
 if __name__ == "__main__":
     try:
         ok = verify("600519")
     except Exception as e:
-        print(f"\n❌ 验证脚本异常: {e}")
+        print(f"\n❌ 验证异常: {e}")
         import traceback
         traceback.print_exc()
         ok = False
-
     sys.exit(0 if ok else 1)

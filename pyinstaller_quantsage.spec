@@ -89,6 +89,9 @@ _extra_hidden = [
     "src.deployment", "src.deployment.resource_path", "src.deployment.version",
     "src.llm", "src.llm.providers", "src.llm.client",
     "src.data", "src.data.market_data",
+    "src.analysis", "src.analysis.indicators",
+    "src.config", "src.config.sentiment_sources",
+    "src.ui.data_inspection",
 
     # Utilities
     "pandas", "numpy", "requests", "httpx", "yaml", "jinja2",
