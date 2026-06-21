@@ -218,6 +218,12 @@ def show_home() -> None:
         k_on = config.get("kronos_enabled", False)
         f_on = config.get("finbert_enabled", False)
         st.caption(f"插件: {'Kronos ✅' if k_on else 'Kronos ⬜'} | {'FinBERT ✅' if f_on else 'FinBERT ⬜'}")
+        # Sentiment sources
+        try:
+            from src.config.sentiment_sources import get_source_list
+            st.caption(f"情绪源: {', '.join(s['label'][:12] for s in get_source_list()[:3])} ...")
+        except Exception:
+            pass
 
     # ── System Status Panel ──
     with st.expander("系统状态", expanded=False):
@@ -411,6 +417,23 @@ def show_home() -> None:
         parts.append("---")
         parts.append("> 本报告由 QuantSage 自动生成，仅供参考研究，不构成任何投资建议，盈亏自负。")
         parts.append("*QuantSage · 仅供参考研究 · 不构成投资建议*")
+
+        # ── Multi-period tech indicators ──
+        try:
+            from src.data.market_data import get_kline as _kline_ind
+            from src.analysis.indicators import compute_all_indicators
+            _ind_df = _kline_ind(symbol, lookback_days=1100)
+            indicators = compute_all_indicators(_ind_df)
+            parts.append("## 📐 多周期技术指标汇总")
+            for period, vals in indicators.items():
+                if vals:
+                    items = [f"**{period}**: " + " | ".join(f"{k}={v}" for k, v in list(vals.items())[:6])]
+                    parts.extend(items)
+            parts.append("")
+            parts.append(f"*复权方式: 前复权(qfq) | 与同花顺/东方财富一致*")
+            parts.append("")
+        except Exception:
+            pass
 
         report = "\n\n".join(parts)
 

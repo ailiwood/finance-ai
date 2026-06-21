@@ -119,14 +119,16 @@ quantsage/
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
 
 ### M7 进度
-- [x] Step 1-8: 核心打包与合规
-- [x] onedir 模式 + TradingAgents-CN 直接打包
-- [x] LLM 合规审查闸 + UI 美化 + 全量日志
-- [x] 数据正确性修复: A股统一前复权(qfq) + 验证脚本
-- [x] 多 LLM 供应商: 14家主流 + Ollama + 自定义兜底
-- [x] Kronos CPU 适配: pick_device() cuda→mps→cpu
-- [x] 源码测试 (134 passed)
-- [ ] exe 打包验证（用户侧）
+- [x] 核心打包(onedir + TA-CN捆绑 + 123 tests)
+- [x] 多LLM供应商(14家) + LLM合规审查闸
+- [x] UI深色科技风 + 版权 + 免责声明
+- [x] 数据可靠性: 全qfq + 多源回退(Tushare→AkShare) + 数据体检页
+- [x] P0红线: 数据验证闸(无数据→终止,禁止LLM编造)
+- [x] 多周期技术指标(MA/MACD/RSI/KDJ/BOLL, 6周期)
+- [x] 情绪数据源配置(AkShare/Finnhub/Custom)
+- [x] Kronos CPU适配(pick_device cuda→mps→cpu)
+- [x] 134 tests passed
+- [ ] exe打包验证(用户侧)
 
 ### M7 架构要点
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包
