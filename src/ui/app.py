@@ -46,7 +46,7 @@ from src.ui.disclaimer_gate import show_disclaimer_gate
 from src.ui.config_wizard import show_wizard
 from src.ui.home import show_home
 from src.core.config_manager import (
-    is_configured, check_disclaimer_accepted, CONFIG_DIR,
+    is_configured, check_disclaimer_accepted, CONFIG_DIR, load_config,
 )
 from src.compliance.disclaimer import get_ui_disclaimer, get_ui_footer
 
@@ -217,6 +217,15 @@ def main() -> None:
     """
     # Ensure config directory exists
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Pre-load Tushare token into env for all pages (data inspection, analysis)
+    try:
+        _cfg = load_config()
+        _tt = _cfg.get("tushare_token", "")
+        if _tt and not _tt.startswith("your_"):
+            _os.environ["TUSHARE_TOKEN"] = _tt
+    except Exception:
+        pass
 
     # Inject global CSS + auto-reconnect JavaScript
     st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
