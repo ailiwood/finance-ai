@@ -154,12 +154,43 @@ p, li, span, div { color: #d1d5db; font-family: 'Segoe UI', 'Microsoft YaHei', s
     text-align: center;
 }
 
+/* ── Community banner ── */
+.quantsage-community {
+    background: linear-gradient(135deg, #1a1040 0%, #162040 100%);
+    border: 1.5px solid #22d3ee;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    text-align: center;
+}
+.quantsage-community a {
+    color: #22d3ee;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    padding: 8px 24px;
+    border: 1px solid #22d3ee;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+.quantsage-community a:hover {
+    background: #22d3ee;
+    color: #0a0e1a;
+}
+.quantsage-community-label {
+    color: #e8eaed;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
 /* ── Copyright footer ── */
 .quantsage-copyright {
     text-align: center;
     color: #6b7280;
     font-size: 0.78rem;
-    margin-top: 2rem;
+    margin-top: 1.5rem;
     padding-top: 1rem;
     border-top: 1px solid #1f2937;
 }
@@ -182,8 +213,16 @@ _COPYRIGHT_HTML = """
 """
 
 
+_COMMUNITY_HTML = """
+<div class="quantsage-community">
+  <div class="quantsage-community-label">软件支持与量化技术交流</div>
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=b7bg64d8-3f24-42ac-8361-ffec9a9c682f" target="_blank">加入飞书群聊</a>
+</div>
+"""
+
+
 def _show_disclaimer_footer() -> None:
-    """Always-visible strong disclaimer + copyright at bottom of every page."""
+    """Always-visible strong disclaimer + community + copyright at bottom."""
     st.divider()
     st.markdown(
         f'<div class="quantsage-disclaimer-banner">'
@@ -191,6 +230,7 @@ def _show_disclaimer_footer() -> None:
         f'</div>',
         unsafe_allow_html=True,
     )
+    st.markdown(_COMMUNITY_HTML, unsafe_allow_html=True)
     st.markdown(_COPYRIGHT_HTML, unsafe_allow_html=True)
 
 
