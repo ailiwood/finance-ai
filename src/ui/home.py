@@ -99,6 +99,15 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config["realtime_data"] = False
         os.environ["DEEPSEEK_API_KEY"] = ds_key
 
+        # Pass Tushare token if configured (fallback when AkShare unreachable)
+        tushare_token = config.get("tushare_token", "")
+        if tushare_token and not tushare_token.startswith("your_"):
+            os.environ["TUSHARE_TOKEN"] = tushare_token
+            ta_config["tushare_token"] = tushare_token
+
+        # Disable curl_cffi to avoid eastmoney connection issues
+        os.environ["AKSHARE_CURL_CFFI_DISABLED"] = "1"
+
         # Use most recent trading day (not today, which may be weekend/holiday)
         try:
             from src.data.market_data import get_kline as _get_kline_for_date

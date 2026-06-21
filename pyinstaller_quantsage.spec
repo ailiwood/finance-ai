@@ -16,7 +16,7 @@ _all_datas = []
 _all_binaries = []
 _all_hidden = []
 
-for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare"]:
+for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare", "tushare"]:
     try:
         d, b, h = collect_all(_pkg)
         _all_datas.extend(d)
@@ -70,7 +70,7 @@ _extra_hidden = [
     "tradingagents.utils", "tradingagents.api",
 
     # TA-CN data dependencies
-    "yfinance", "stockstats", "pymongo",
+    "yfinance", "stockstats", "pymongo", "tushare",
 
     # QuantSage modules
     "src", "src.core", "src.core.config_manager",
