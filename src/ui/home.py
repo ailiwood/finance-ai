@@ -23,18 +23,33 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 _TA_AVAILABLE = True
 
+# Inline SVG icons (vector, any scale)
+_ICON_FUNDAMENTALS = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M4 20h16M5.5 18.5V11h13v7.5M3.5 11 12 5l8.5 6M8 18.5v-5h2.5v5M13.5 18.5v-5H16v5"/><path d="M15.5 8.5v-3h4v5"/><path d="M15.5 8.5h4"/></svg>'
+_ICON_TECHNICAL = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M3.5 3.5v17h17"/><path d="M5.5 16.5 9 12.5l3 2.2 5.5-7.2 2 1.5"/><rect x="6.25" y="11" width="2.5" height="3" rx=".5"/><rect x="10.25" y="10" width="2.5" height="2.5" rx=".5"/><rect x="14.25" y="11" width="2.5" height="2.5" rx=".5"/><rect x="17.75" y="7" width="2.5" height="2" rx=".5"/></svg>'
+_ICON_SENTIMENT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#39d0d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M4 5.5h16v10.2a2 2 0 0 1-2 2H10l-4 3v-3.1a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z"/><path d="M6.5 12h2l1.5-3 2.2 6 1.8-4h3.5"/></svg>'
+_ICON_RISK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M12 3.5 19 6v5.3c0 4.4-2.9 7.6-7 9.2-4.1-1.6-7-4.8-7-9.2V6l7-2.5Z"/><path d="M12 7v5.3M12 16.2h.01" stroke-width="2.1"/></svg>'
+
+def _card(title: str, icon_svg: str, content: str) -> str:
+    """Render a styled card with SVG icon."""
+    return f'<div class="quantsage-card"><div class="quantsage-card-header">{icon_svg} {title}</div>{content}</div>'
+
 CSS_HOME = """
 <style>
-.home-container { max-width: 900px; margin: 2vh auto; padding: 1.5rem 2rem; background: #1a1a2e; border-radius: 12px; border: 1px solid #333; }
-.home-title { text-align: center; color: #e0e0e0; font-size: 1.8rem; margin-bottom: 0.5rem; }
-.config-card { background: #0f0f1a; border: 1px solid #2a2a3e; border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem; }
-.card-title { color: #ccc; font-size: 1.1rem; margin-bottom: 0.8rem; }
-.status-ok { color: #4caf50; font-size: 1.2rem; }
-.status-warn { color: #ff9800; font-size: 1.2rem; }
-.status-error { color: #f44336; font-size: 1.2rem; }
-.analysis-card { background: #0a1a2e; border: 1px solid #2a4a6e; border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem; }
-.disclaimer-footer { text-align: center; color: #888; font-size: 0.8rem; margin-top: 2rem; border-top: 1px solid #333; padding-top: 1rem; }
-.progress-box { background: #0f1a2e; border: 1px solid #2a3a5e; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+.home-container { max-width: 960px; margin: 2vh auto; padding: 1.5rem 2rem; }
+.home-title { text-align: center; color: #e8eaed; font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+.home-subtitle { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.config-card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem; }
+.card-title { color: #e8eaed; font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.status-ok { color: #34d399; }
+.status-warn { color: #fbbf24; }
+.status-error { color: #f87171; }
+.analysis-card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+.disclaimer-footer { text-align: center; color: #6b7280; font-size: 0.78rem; margin-top: 2rem; border-top: 1px solid #1f2937; padding-top: 1rem; }
+.progress-box { background: #111827; border: 1px solid #fbbf24; border-radius: 8px; padding: 1.25rem; margin: 1rem 0; text-align: center; }
+.quantsage-card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
+.quantsage-card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; font-weight: 600; font-size: 1.1rem; color: #e8eaed; }
+.quantsage-card-number { font-size: 1.4rem; font-weight: 700; color: #22d3ee; }
+.quantsage-card-label { color: #9ca3af; font-size: 0.8rem; }
 </style>
 """
 
@@ -123,7 +138,7 @@ def show_home() -> None:
     st.markdown('<div class="home-container">', unsafe_allow_html=True)
 
     st.markdown('<h1 class="home-title">QuantSage</h1>', unsafe_allow_html=True)
-    st.caption("多智能体股票研究辅助平台")
+    st.markdown('<p class="home-subtitle">多智能体股票研究辅助平台</p>', unsafe_allow_html=True)
 
     config = load_config()
     key_status = get_key_status()
@@ -310,20 +325,17 @@ def show_home() -> None:
 
         # Market / Technical
         if reports.get("market_report"):
-            parts.append("## 技术面分析")
-            parts.append(reports["market_report"])
+            parts.append(_card("📈 技术面分析", _ICON_TECHNICAL, reports["market_report"]))
             parts.append("")
 
         # Fundamentals
         if reports.get("fundamentals_report"):
-            parts.append("## 基本面分析")
-            parts.append(reports["fundamentals_report"])
+            parts.append(_card("📊 基本面分析", _ICON_FUNDAMENTALS, reports["fundamentals_report"]))
             parts.append("")
 
         # Sentiment
         if reports.get("sentiment_report"):
-            parts.append("## 情绪面分析")
-            parts.append(reports["sentiment_report"])
+            parts.append(_card("💬 情绪面分析", _ICON_SENTIMENT, reports["sentiment_report"]))
             parts.append("")
 
         # News
@@ -334,11 +346,8 @@ def show_home() -> None:
 
         # Risk / Final Decision
         if reports.get("final_trade_decision") or reports.get("judge_decision"):
-            parts.append("## 风险管控与最终决策")
-            if reports.get("final_trade_decision"):
-                parts.append(reports["final_trade_decision"])
-            elif reports.get("judge_decision"):
-                parts.append(reports["judge_decision"])
+            parts.append(_card("🛡️ 风险管控与最终决策", _ICON_RISK,
+                reports.get("final_trade_decision") or reports.get("judge_decision", "")))
             parts.append("")
 
         # Conclusion
@@ -440,5 +449,6 @@ def show_home() -> None:
             st.rerun()
 
     # Footer disclaimer
-    st.markdown(f'<div class="disclaimer-footer">{get_ui_disclaimer()}</div>', unsafe_allow_html=True)
+    from src.compliance.disclaimer import get_ui_footer
+    st.markdown(f'<div class="disclaimer-footer">{get_ui_footer()}</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)

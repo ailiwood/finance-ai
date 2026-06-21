@@ -72,12 +72,7 @@ header {visibility: hidden;}
 */
 
 .stApp {
-    background-color: #0a0e1a;
-    background-image: url('/app/static/src/ui/assets/banner_bg.png');
-    background-size: cover;
-    background-position: top center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
+    background: radial-gradient(ellipse at 50% 0%, #1a1040 0%, #0d1117 50%, #0a0e1a 100%);
     color: #e8eaed;
 }
 
