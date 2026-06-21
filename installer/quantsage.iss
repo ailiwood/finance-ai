@@ -59,6 +59,13 @@ Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; F
 ; Main application (built by PyInstaller — onedir mode)
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; ─── Optional Tasks ───
+[Tasks]
+Name: "desktopicon"; Description: "Create &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
+Name: "startmenu"; Description: "Add to &Start Menu"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
+Name: "quicklaunch"; Description: "Add to &Quick Launch"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
+Name: "autostart"; Description: "Start QuantSage when Windows &starts"; GroupDescription: "Startup:"; Flags: unchecked
+
 ; ─── Component Selection ───
 [Types]
 Name: "minimal"; Description: "Minimal (core app only, ~300MB)"
@@ -73,11 +80,16 @@ Name: "finbert"; Description: "FinBERT Sentiment Engine (~3.3GB)"; Types: full; 
 ; ─── Shortcuts ───
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; \
-    Flags: useapppaths
-Name: "{group}\访问官网"; Filename: "{#AppURL}"
-Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"
-; Desktop shortcut disabled — causes IPersistFile::Save access denied on some Windows configs
-; Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"
+    Flags: useapppaths; Tasks: startmenu
+Name: "{group}\访问官网"; Filename: "{#AppURL}"; Tasks: startmenu
+Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"; Tasks: startmenu
+Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; \
+    Tasks: desktopicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\QuantSage.lnk"; \
+    Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; \
+    Tasks: quicklaunch
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; \
+    WorkingDir: "{app}"; Tasks: autostart
 
 ; ─── Post-install Actions ───
 [Run]

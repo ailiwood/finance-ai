@@ -16,11 +16,14 @@ _all_datas = []
 _all_binaries = []
 _all_hidden = []
 
-for _pkg in ["streamlit", "altair", "pydeck", "chromadb"]:
-    d, b, h = collect_all(_pkg)
-    _all_datas.extend(d)
-    _all_binaries.extend(b)
-    _all_hidden.extend(h)
+for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL"]:
+    try:
+        d, b, h = collect_all(_pkg)
+        _all_datas.extend(d)
+        _all_binaries.extend(b)
+        _all_hidden.extend(h)
+    except Exception:
+        pass  # Package not installed — skip
 
 # ── Additional package metadata ──
 _metadata_pkgs = [
@@ -74,6 +77,7 @@ _extra_hidden = [
     "src.report", "src.report.report_generator",
     "src.report.pdf_exporter", "src.report.templates",
     "src.compliance", "src.compliance.disclaimer", "src.compliance.phrase_checker",
+    "src.compliance.report_reviewer",
     "src.plugins", "src.plugins.kronos_service", "src.plugins.kronos_service.service",
     "src.plugins.kronos_service.client", "src.plugins.kronos_service.config",
     "src.plugins.kronos_service.gpu_detector", "src.plugins.kronos_service.model_engine",
@@ -88,6 +92,8 @@ _extra_hidden = [
 
     # Report
     "fpdf", "markdown_it", "Pygments",
+    # fpdf depends on unittest.mock for digital signatures
+    "unittest", "unittest.mock",
 ]
 
 # === Analysis ===
@@ -124,8 +130,9 @@ a = Analysis(
         # GUI toolkits (not needed)
         "tkinter", "PyQt5", "PySide2", "wx",
 
-        # Testing (not needed at runtime)
-        "pytest", "unittest",
+        # Testing
+        "pytest",
+        # NOTE: unittest is NOT excluded — fpdf needs unittest.mock
 
         # External database drivers (not directly needed)
         "psycopg2", "redis",

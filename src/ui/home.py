@@ -275,7 +275,12 @@ def show_home() -> None:
 
         st.success(f"✅ {result['symbol']} {result['stock_name']} 分析完成")
 
-        from src.report.pdf_exporter import export_report_pdf, export_report_markdown
+        # Sanitize decision dict
+        try:
+            from src.compliance.report_reviewer import sanitize_decision
+            decision = sanitize_decision(decision)
+        except Exception:
+            pass
 
         # Build report from agent reports
         direction_map = {"卖出": "看空", "买入": "看多", "持有": "中性"}
@@ -343,22 +348,35 @@ def show_home() -> None:
 
         report = "\n\n".join(parts)
 
+        # ── Compliance review gate ──
+        try:
+            from src.compliance.report_reviewer import review_and_sanitize
+            report = review_and_sanitize(report)
+        except Exception:
+            pass  # Never block report output on compliance failure
+
         with st.expander("查看完整报告", expanded=True):
             st.markdown(report)
 
         col1, col2, col3 = st.columns(3)
         safe_symbol = result["symbol"].replace("/", "_")
         with col1:
-            st.download_button("下载 Markdown", data=report,
-                file_name=f"{safe_symbol}_报告.md", mime="text/markdown", use_container_width=True)
+            try:
+                from src.report.pdf_exporter import export_report_markdown
+                st.download_button("下载 Markdown", data=report,
+                    file_name=f"{safe_symbol}_报告.md", mime="text/markdown", use_container_width=True)
+            except Exception:
+                st.download_button("下载 Markdown", data=report,
+                    file_name=f"{safe_symbol}_报告.md", mime="text/markdown", use_container_width=True)
         with col2:
             try:
+                from src.report.pdf_exporter import export_report_pdf
                 pdf_path = export_report_pdf(report, f"reports/{safe_symbol}_report.pdf")
                 with open(pdf_path, "rb") as f:
                     st.download_button("下载 PDF", data=f.read(),
                         file_name=f"{safe_symbol}_报告.pdf", mime="application/pdf", use_container_width=True)
-            except Exception as e:
-                st.caption(f"PDF 导出暂不可用: {e}")
+            except Exception:
+                st.caption("⚠️ PDF 导出组件暂不可用，请使用 Markdown 格式下载")
         with col3:
             if st.button("清除结果", key="clear_result", use_container_width=True):
                 st.session_state.analysis_result = None

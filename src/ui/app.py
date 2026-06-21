@@ -53,43 +53,127 @@ from src.compliance.disclaimer import get_ui_disclaimer
 
 CSS_GLOBAL = """
 <style>
-/* Hide Streamlit branding */
+/* ── Streamlit branding ── */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
-/* Dark theme base */
+/* ── Dark tech theme palette ──
+   bg-primary:    #0a0e1a  (deep navy)
+   bg-secondary:  #111827  (card bg)
+   bg-tertiary:   #1a2236  (hover)
+   text-primary:  #e8eaed  (white-ish)
+   text-secondary:#9ca3af  (gray)
+   accent-cyan:   #22d3ee  (highlights)
+   accent-green:  #34d399  (success)
+   accent-red:    #f87171  (warnings)
+   accent-gold:   #fbbf24  (emphasis)
+   border:        #1f2937  (subtle)
+*/
+
 .stApp {
-    background-color: #0d0d1a;
+    background-color: #0a0e1a;
+    color: #e8eaed;
 }
 
-/* Override Streamlit default colors */
+/* ── Typography ── */
+h1, h2, h3, h4, h5, h6 { color: #e8eaed !important; }
+p, li, span, div { color: #d1d5db; }
+.stCaption { color: #9ca3af !important; }
+
+/* ── Buttons ── */
 .stButton > button {
     border-radius: 6px;
+    border: 1px solid #1f2937;
+    background-color: #111827;
+    color: #e8eaed;
+    transition: all 0.2s ease;
+}
+.stButton > button:hover {
+    border-color: #22d3ee;
+    background-color: #1a2236;
+}
+.stButton > button:disabled {
+    opacity: 0.4;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-    width: 8px;
+/* ── Text inputs ── */
+.stTextInput > div > div > input {
+    background-color: #111827;
+    color: #e8eaed;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
 }
-::-webkit-scrollbar-track {
-    background: #0f0f1a;
+.stSelectbox > div > div {
+    background-color: #111827;
+    color: #e8eaed;
 }
-::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 4px;
+
+/* ── Expanders ── */
+.streamlit-expanderHeader {
+    background-color: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 6px;
+    color: #e8eaed;
 }
-::-webkit-scrollbar-thumb:hover {
-    background: #555;
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #0a0e1a; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+/* ── Disclaimer banner (strong red) ── */
+.quantsage-disclaimer-banner {
+    background: linear-gradient(135deg, #1f0a0a 0%, #2d0f0f 100%);
+    border: 2px solid #f87171;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    color: #fca5a5;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* ── Copyright footer ── */
+.quantsage-copyright {
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.78rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #1f2937;
+}
+.quantsage-copyright a {
+    color: #9ca3af;
+    text-decoration: none;
+}
+.quantsage-copyright a:hover {
+    color: #22d3ee;
 }
 </style>
 """
 
+_COPYRIGHT_HTML = """
+<div class="quantsage-copyright">
+本软件由 <strong>ailiwood</strong> 开发 |
+<a href="https://github.com/ailiwood" target="_blank">GitHub</a> |
+抖音号: 23230218947
+</div>
+"""
+
 
 def _show_disclaimer_footer() -> None:
-    """Always-visible disclaimer footer at the bottom of every page."""
+    """Always-visible strong disclaimer + copyright at bottom of every page."""
     st.divider()
-    st.caption(f"⚠️ {get_ui_disclaimer()}")
+    st.markdown(
+        f'<div class="quantsage-disclaimer-banner">'
+        f'⚠️ {get_ui_disclaimer()}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(_COPYRIGHT_HTML, unsafe_allow_html=True)
 
 
 def _init_session() -> None:

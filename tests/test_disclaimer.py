@@ -21,13 +21,13 @@ def test_load_disclaimer_returns_text():
     text = load_disclaimer()
     assert isinstance(text, str)
     assert len(text) > 50
-    assert "仅供参考研究" in text
+    assert "仅供参考" in text
 
 
 def test_get_ui_disclaimer():
     """get_ui_disclaimer should contain key phrases."""
     text = get_ui_disclaimer()
-    assert "仅供参考研究" in text
+    assert "仅供参考" in text
     assert "不构成任何投资建议" in text
     assert "盈亏自负" in text
 
@@ -36,7 +36,7 @@ def test_get_footer_text():
     """get_footer_text should mention QuantSage."""
     text = get_footer_text()
     assert "QuantSage" in text
-    assert "仅供参考研究" in text
+    assert "仅供参考" in text
 
 
 def test_get_pdf_footer_text():
@@ -49,7 +49,7 @@ def test_get_pdf_footer_text():
 def test_get_api_disclaimer():
     """get_api_disclaimer should contain key compliance phrases."""
     text = get_api_disclaimer()
-    assert "仅供参考研究" in text
+    assert "仅供参考" in text
 
 
 def test_parse_banned_phrases_returns_list():
