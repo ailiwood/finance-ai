@@ -67,15 +67,18 @@ class TestSanitizeDecision:
 
 
 class TestReviewAndSanitize:
-    def test_returns_string(self):
-        result = review_and_sanitize("测试报告")
+    def test_returns_tuple(self):
+        result, method = review_and_sanitize("测试报告")
         assert isinstance(result, str)
+        assert method in ("llm", "regex")
 
     def test_preserves_long_text(self):
         long_text = "这是一份详细的股票研究报告。" * 10
-        result = review_and_sanitize(long_text)
+        result, method = review_and_sanitize(long_text)
         assert len(result) > 0
+        assert method in ("llm", "regex")
 
     def test_handles_empty_text(self):
-        result = review_and_sanitize("")
+        result, method = review_and_sanitize("")
         assert isinstance(result, str)
+        assert method in ("llm", "regex")

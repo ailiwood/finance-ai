@@ -178,6 +178,11 @@ def scan_project(root: Path | None = None) -> List[ComplianceViolation]:
         "TESTING.md",          # testing guide referencing banned phrases
         "disclaimer.py",       # parses banned phrase definitions
         "phrase_checker.py",   # compliance scanner source
+        "report_reviewer.py",  # contains regex patterns of banned phrases for sanitization
+        "test_report_reviewer.py",  # tests that validate sanitization of banned phrases
+        "UI_COMPLIANCE_SPEC.md",   # reference document with banned phrase examples
+        "PACKAGING_FIXES.md",      # reference document
+        "next_stage_cc_prompt.md", # reference document with examples
     }
     scan_extensions = {".py", ".md", ".txt"}
 

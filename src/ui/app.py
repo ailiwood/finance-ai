@@ -48,7 +48,7 @@ from src.ui.home import show_home
 from src.core.config_manager import (
     is_configured, check_disclaimer_accepted, CONFIG_DIR,
 )
-from src.compliance.disclaimer import get_ui_disclaimer
+from src.compliance.disclaimer import get_ui_disclaimer, get_ui_footer
 
 
 CSS_GLOBAL = """
@@ -169,7 +169,7 @@ def _show_disclaimer_footer() -> None:
     st.divider()
     st.markdown(
         f'<div class="quantsage-disclaimer-banner">'
-        f'⚠️ {get_ui_disclaimer()}'
+        f'⚠️ {get_ui_footer()}'
         f'</div>',
         unsafe_allow_html=True,
     )

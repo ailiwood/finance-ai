@@ -61,22 +61,20 @@ _DIRECTION_MAP = {
 }
 
 
-def review_and_sanitize(report_text: str) -> str:
+def review_and_sanitize(report_text: str) -> tuple[str, str]:
     """Review and sanitize report text through LLM, with regex fallback.
 
     Args:
-        report_text: Raw report text (may contain directional investment advice).
+        report_text: Raw report text.
 
     Returns:
-        Sanitized text with neutral research language.
+        (sanitized_text, method) where method is "llm" or "regex".
     """
-    # Try LLM review first
     llm_result = _review_via_llm(report_text)
     if llm_result is not None:
-        return llm_result
+        return llm_result, "llm"
 
-    # Fallback: regex-based sanitization
-    return _review_via_regex(report_text)
+    return _review_via_regex(report_text), "regex"
 
 
 def _review_via_llm(text: str) -> Optional[str]:

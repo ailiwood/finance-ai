@@ -173,6 +173,15 @@ def show_home() -> None:
                 st.caption("⬜ GPU: 检测不可用")
             # TA engine (bundled)
             st.markdown(f'<span style="color:#4caf50;">✅ 分析引擎: TradingAgents-CN</span>', unsafe_allow_html=True)
+            # Data source
+            ds = config.get("default_china_data_source", "akshare")
+            ds_names = {"akshare": "AkShare（免费，免注册）", "tushare": "Tushare", "baostock": "BaoStock"}
+            ds_label = ds_names.get(ds, ds)
+            if config.get("tushare_token"):
+                st.markdown(f'<span style="color:#4caf50;">✅ 数据源: {ds_label}</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span style="color:#4caf50;">✅ 数据源: {ds_label}</span>', unsafe_allow_html=True)
+            st.caption("默认使用 AkShare 免费数据，覆盖A股/指数/基金。非交易日数据为空属正常。")
         with col2:
             # Network
             try:
@@ -213,6 +222,7 @@ def show_home() -> None:
         depth = st.selectbox("分析深度", options=[1, 2, 3, 4, 5], index=2, key="depth_select")
 
     st.caption(f"常用: {market_info['examples']}")
+    st.caption("ℹ️ A股交易日: 周一至周五 9:30-15:00（节假日无数据属正常现象）")
 
     # Auto-detect stock name
     stock_name = STOCK_NAMES.get(symbol, "")
@@ -349,13 +359,19 @@ def show_home() -> None:
         report = "\n\n".join(parts)
 
         # ── Compliance review gate ──
+        review_method = "skipped"
         try:
             from src.compliance.report_reviewer import review_and_sanitize
-            report = review_and_sanitize(report)
+            report, review_method = review_and_sanitize(report)
         except Exception:
             pass  # Never block report output on compliance failure
 
-        with st.expander("查看完整报告", expanded=True):
+        review_label = {
+            "llm": "✅ 已通过 LLM 合规审查",
+            "regex": "⚠️ LLM 审查不可用，已通过本地规则过滤",
+            "skipped": "⚠️ 合规审查跳过",
+        }.get(review_method, "")
+        with st.expander(f"查看完整报告  {review_label}", expanded=True):
             st.markdown(report)
 
         col1, col2, col3 = st.columns(3)

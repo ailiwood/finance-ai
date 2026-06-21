@@ -39,13 +39,21 @@ def _parse_disclaimer_sections() -> dict[str, str]:
     if std_match:
         sections["standard"] = std_match.group(1).strip()
 
-    # UI 首屏
+    # UI 首屏（弹窗完整版）
     ui_match = re.search(
-        r'### UI 首屏\n+"(.*?)"',
+        r'### UI 首屏（弹窗完整版）\n+"(.*?)"',
         text
     )
     if ui_match:
         sections["ui"] = ui_match.group(1).strip()
+
+    # UI 页脚（常驻精简版）
+    ui_footer_match = re.search(
+        r'### UI 页脚（常驻精简版）\n+"(.*?)"',
+        text
+    )
+    if ui_footer_match:
+        sections["ui_footer"] = ui_footer_match.group(1).strip()
 
     # 报告页脚
     report_match = re.search(
@@ -123,15 +131,25 @@ def get_footer_text() -> str:
 
 
 def get_ui_disclaimer() -> str:
-    """Return the one-liner for UI footers and status bars.
+    """Return the gate text for the disclaimer acceptance popup.
 
-    Example:
-        "本软件仅供参考研究，不构成任何投资建议，盈亏自负。"
+    Includes the "点击同意" instruction.
     """
     try:
         return _get_section("ui").rstrip("。") + "。"
     except (FileNotFoundError, ValueError):
-        return "本软件仅供参考研究，不构成任何投资建议，盈亏自负。"
+        return "本软件的产出仅供参考，不构成任何投资建议，盈亏自负！慎重参考！"
+
+
+def get_ui_footer() -> str:
+    """Return the compact footer text for every page bottom.
+
+    Does NOT include the gate-click instruction.
+    """
+    try:
+        return _get_section("ui_footer").rstrip("。") + "。"
+    except (FileNotFoundError, ValueError):
+        return "本软件的产出仅供参考，不构成任何投资建议，盈亏自负！慎重参考！"
 
 
 def get_pdf_footer_text() -> str:
