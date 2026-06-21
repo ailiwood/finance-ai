@@ -16,7 +16,7 @@ _all_datas = []
 _all_binaries = []
 _all_hidden = []
 
-for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL"]:
+for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare"]:
     try:
         d, b, h = collect_all(_pkg)
         _all_datas.extend(d)
