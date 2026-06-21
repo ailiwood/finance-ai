@@ -86,6 +86,25 @@ def get_optimal_device(prefer_gpu: bool = True) -> str:
     return "cuda:0" if gpu_info.available else "cpu"
 
 
+def pick_device() -> str:
+    """Auto-detect the best available compute device.
+
+    Returns one of: "cuda", "mps", "cpu"
+    - CUDA: NVIDIA GPU (30/40/50 series)
+    - MPS: Apple Silicon (M1/M2/M3/M4)
+    - CPU: Everyone else (AMD, Intel iGPU, no GPU)
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return "mps"
+    except ImportError:
+        pass
+    return "cpu"
+
+
 def format_gpu_summary() -> str:
     """Return a human-readable GPU summary string."""
     info = detect_gpu()

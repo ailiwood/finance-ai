@@ -85,6 +85,8 @@ _extra_hidden = [
     "src.plugins.finbert_service.client", "src.plugins.finbert_service.config",
     "src.plugins.finbert_service.sentiment_engine",
     "src.deployment", "src.deployment.resource_path", "src.deployment.version",
+    "src.llm", "src.llm.providers", "src.llm.client",
+    "src.data", "src.data.market_data",
 
     # Utilities
     "pandas", "numpy", "requests", "httpx", "yaml", "jinja2",
