@@ -1,16 +1,19 @@
 """QuantSage Desktop Launcher.
 
-Entry point for PyInstaller-packaged executable.
+Entry point for PyInstaller-packaged (onedir) executable.
 
 Architecture:
-  Parent process launches a child process (itself with --_server flag).
-  The child runs Streamlit. The parent monitors health, opens browser,
-  and relays child output to the console.
+  Parent process spawns a child (itself with --_server flag).
+  Child runs Streamlit. Parent monitors health, opens browser,
+  and relays child output. All output is mirrored to a log file
+  at ~/.quantsage/logs/quantsage.log for post-crash diagnosis.
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+import logging.handlers
 import os
 import socket
 import subprocess
@@ -29,52 +32,89 @@ DEFAULT_PORT = 8501
 HEALTH_CHECK_TIMEOUT = 120
 POLL_INTERVAL = 1.5
 
+# ── Global log file path ──
+_LOG_DIR = Path.home() / ".quantsage" / "logs"
+_LOG_FILE = _LOG_DIR / "quantsage.log"
+
+
+def _setup_file_logging() -> logging.Logger:
+    """Configure rotating file logger for crash diagnosis.
+
+    Returns a logger that writes to both the log file and stderr.
+    Max 10 MB per file, keeps 3 backups.
+    """
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    logger = logging.getLogger("quantsage")
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # Don't duplicate to root logger
+
+    # Clear existing handlers (prevent duplicates on re-entry)
+    logger.handlers.clear()
+
+    # File handler with rotation
+    fh = logging.handlers.RotatingFileHandler(
+        str(_LOG_FILE),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    logger.addHandler(fh)
+
+    # Stream handler (to stderr so it doesn't conflict with subprocess PIPE)
+    sh = logging.StreamHandler(sys.stderr)
+    sh.setLevel(logging.INFO)
+    sh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logger.addHandler(sh)
+
+    return logger
+
+
+log = _setup_file_logging()
+
+
+def _log_and_print(msg: str, level: int = logging.INFO, **kwargs) -> None:
+    """Log to file and print to stdout. Extra kwargs passed to print()."""
+    log.log(level, msg)
+    print(msg, flush=True, **kwargs)
+
 
 def _open_browser_windows(url: str) -> bool:
-    """Open URL in default browser. Returns True if successful.
-
-    Tries 4 methods in order of reliability on Windows:
-    1. webbrowser.open()
-    2. os.startfile()
-    3. ShellExecuteW via ctypes (most reliable Windows API)
-    4. cmd /c start
-    """
-    # Method 1: webbrowser
-    try:
-        if webbrowser.open(url):
-            return True
-    except Exception:
-        pass
-
-    # Method 2: os.startfile
-    try:
-        os.startfile(url)
-        return True
-    except Exception:
-        pass
-
-    # Method 3: ShellExecuteW via ctypes (works even without default browser set)
-    try:
-        import ctypes
-        SW_SHOWNORMAL = 1
-        ctypes.windll.shell32.ShellExecuteW(
-            None, "open", url, None, None, SW_SHOWNORMAL
-        )
-        return True
-    except Exception:
-        pass
-
-    # Method 4: cmd /c start
-    try:
-        subprocess.run(
-            ["cmd", "/c", "start", "", url],
-            capture_output=True, timeout=10,
-        )
-        return True
-    except Exception:
-        pass
-
+    """Try 4 methods to open the browser. Returns True if any succeeds."""
+    for method, fn in [
+        ("webbrowser", lambda: webbrowser.open(url)),
+        ("os.startfile", lambda: os.startfile(url) or True),
+        ("ShellExecuteW", _shell_execute),
+        ("cmd start", _cmd_start),
+    ]:
+        try:
+            if fn():
+                log.info("Browser opened via %s", method)
+                return True
+        except Exception as e:
+            log.debug("Browser method %s failed: %s", method, e)
+    log.warning("All browser methods failed")
     return False
+
+
+def _shell_execute() -> bool:
+    import ctypes
+    ctypes.windll.shell32.ShellExecuteW(None, "open", url_for_shell, None, None, 1)
+    return True
+
+
+def _cmd_start() -> bool:
+    subprocess.run(["cmd", "/c", "start", "", url_for_shell], capture_output=True, timeout=10)
+    return True
+
+
+# Module-level for _open_browser_windows closure access
+url_for_shell = ""
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -92,7 +132,7 @@ def find_available_port(start: int = DEFAULT_PORT, max_attempts: int = 100) -> i
         port = start + offset
         if is_port_available(port):
             return port
-    raise RuntimeError(f"No available ports from {start} to {start + max_attempts}")
+    raise RuntimeError(f"No available ports from {start}")
 
 
 def wait_for_server(port: int, timeout: int = HEALTH_CHECK_TIMEOUT) -> bool:
@@ -120,23 +160,7 @@ def handle_reset_config() -> None:
             elif item.is_dir():
                 import shutil
                 shutil.rmtree(item)
-    print("[QuantSage] Configuration reset complete.")
-
-
-def _write_crash_log(error: str, script: str) -> str:
-    """Write crash information to a log file. Returns the log file path."""
-    log_dir = Path.home() / ".quantsage"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "crash.log"
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    log_path.write_text(
-        f"[{timestamp}] QUANTSAGE CRASH\n"
-        f"Script: {script}\n"
-        f"Error:\n{error}\n"
-        f"---\n",
-        encoding="utf-8",
-    )
-    return str(log_path)
+    _log_and_print("[QuantSage] Configuration reset complete.")
 
 
 def _get_app_script() -> str:
@@ -151,18 +175,20 @@ def _get_app_script() -> str:
 
 
 def _run_server_mode(script_path: str, port: int) -> None:
-    """Child process: start Streamlit server."""
+    """Child process: start Streamlit server (all output to log)."""
     import streamlit.web.bootstrap as bootstrap
     from streamlit import config as _config
 
     main_script = os.path.abspath(script_path)
     _config._main_script_path = main_script
 
+    # Suppress repetitive CORS/XSRF warning
+    _config.set_option("server.enableCORS", True)
+    _config.set_option("server.enableXsrfProtection", False)
     _config.set_option("global.developmentMode", False)
     _config.set_option("server.port", port)
     _config.set_option("server.address", "127.0.0.1")
     _config.set_option("server.headless", True)
-    _config.set_option("server.enableXsrfProtection", False)
     _config.set_option("browser.serverAddress", "127.0.0.1")
     _config.set_option("browser.serverPort", port)
     _config.set_option("browser.gatherUsageStats", False)
@@ -173,6 +199,7 @@ def _run_server_mode(script_path: str, port: int) -> None:
         "server_port": port,
         "server_address": "127.0.0.1",
         "server_headless": True,
+        "enable_cors": True,
         "enable_xsrf_protection": False,
         "browser_server_address": "127.0.0.1",
         "browser_server_port": port,
@@ -203,29 +230,31 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    global url_for_shell
     args = parse_args()
 
-    # ── CHILD PROCESS: Streamlit server ──
+    # ── CHILD: Streamlit server ──
     if args._server:
         script = args._script or _get_app_script()
-        print(f"[QuantSage Server] Starting on 127.0.0.1:{args.port}", flush=True)
+        log.info("Server starting on 127.0.0.1:%s, script=%s", args.port, script)
         try:
             _run_server_mode(script, args.port)
         except SystemExit:
             pass
         except BaseException:
             tb = traceback.format_exc()
-            print(f"[QuantSage Server] FATAL ERROR:\n{tb}", flush=True)
-            log_path = _write_crash_log(tb, script)
-            print(f"[QuantSage Server] Crash log: {log_path}", flush=True)
+            log.critical("FATAL ERROR in server:\n%s", tb)
+            print(f"\n[QuantSage Server] FATAL ERROR:\n{tb}", flush=True)
+            print(f"[QuantSage Server] Log file: {_LOG_FILE}", flush=True)
             return 1
-        print("[QuantSage Server] Stopped.", flush=True)
+        log.info("Server stopped normally")
         return 0
 
-    # ── PARENT PROCESS: launcher ──
-    print(f"\n{'='*60}")
-    print(f"  QuantSage v{__version__}")
-    print(f"  {'='*60}\n")
+    # ── PARENT: launcher ──
+    log.info("QuantSage v%s starting", __version__)
+    _log_and_print(f"\n{'='*60}")
+    _log_and_print(f"  QuantSage v{__version__}")
+    _log_and_print(f"  {'='*60}\n")
 
     if args.reset_config:
         handle_reset_config()
@@ -234,69 +263,50 @@ def main() -> int:
     port = args.port
 
     if not is_port_available(port):
-        print(f"[QuantSage] Port {port} is in use. Trying next available...", flush=True)
-        port = find_available_port(port + 1)
+        alt = find_available_port(port + 1)
+        log.warning("Port %s in use, switching to %s", port, alt)
+        port = alt
 
     url = f"http://127.0.0.1:{port}"
+    url_for_shell = url
 
-    print(f"[QuantSage] Starting server...", flush=True)
+    log.info("Spawning server subprocess")
+    _log_and_print("[QuantSage] Starting server...")
 
-    cmd = [
-        sys.executable,
-        "--_server",
-        "--_script", script_path,
-        "--port", str(port),
-    ]
+    cmd = [sys.executable, "--_server", "--_script", script_path, "--port", str(port)]
 
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
+    # Let the child inherit stdout/stderr directly — capturing via PIPE
+    # breaks Streamlit's click.echo() on Windows (OSError: Invalid argument).
+    # The child's output goes to the same console; logging is done via the
+    # file logger configured in _setup_file_logging().
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        creationflags=creationflags,
+        # Inherit stdout/stderr so Streamlit can use click.echo normally
+        stdout=None,
+        stderr=None,
     )
 
-    def _stream_output():
-        if proc.stdout:
-            for line in proc.stdout:
-                stripped = line.rstrip()
-                if stripped:
-                    print(f"  {stripped}", flush=True)
-
-    output_thread = threading.Thread(target=_stream_output, daemon=True)
-    output_thread.start()
-
-    print("[QuantSage] Waiting for server...", end="", flush=True)
+    _log_and_print("[QuantSage] Waiting for server...", end="")
     if not wait_for_server(port):
-        print(" FAILED")
-        print("[QuantSage] Server did not start. Check the crash log at:", flush=True)
-        log_path = Path.home() / ".quantsage" / "crash.log"
-        if log_path.exists():
-            print(f"  {log_path}", flush=True)
-            print(log_path.read_text(encoding="utf-8"), flush=True)
+        log.error("Server failed to start within %ss", HEALTH_CHECK_TIMEOUT)
+        _log_and_print(" FAILED")
         proc.terminate()
+        _log_and_print(f"[QuantSage] Check log: {_LOG_FILE}")
         return 1
-    print(" OK")
+    _log_and_print(" OK")
 
-    # Open browser
     if not args.no_browser:
-        print(f"[QuantSage] Opening {url}", flush=True)
+        _log_and_print(f"[QuantSage] Opening {url}")
         if not _open_browser_windows(url):
-            print(f"[QuantSage] Please open your browser and visit:", flush=True)
-            print(f"  {url}", flush=True)
+            _log_and_print(f"[QuantSage] Please visit: {url}")
 
-    print(f"[QuantSage] Running at {url}. Press Ctrl+C to stop.\n", flush=True)
+    _log_and_print(f"[QuantSage] Running at {url}. Press Ctrl+C to stop.\n")
 
-    # Monitor child process; detect crashes
     retcode = None
     try:
         retcode = proc.wait()
     except KeyboardInterrupt:
-        print("\n[QuantSage] Shutting down...", flush=True)
+        _log_and_print("\n[QuantSage] Shutting down...")
         proc.terminate()
         try:
             proc.wait(timeout=10)
@@ -304,12 +314,12 @@ def main() -> int:
             proc.kill()
 
     if retcode is not None and retcode != 0:
-        print(f"[QuantSage] Server exited with code {retcode}.", flush=True)
-        log_path = Path.home() / ".quantsage" / "crash.log"
-        if log_path.exists():
-            print(f"[QuantSage] Crash log: {log_path}", flush=True)
+        log.error("Server exited with code %s", retcode)
+        _log_and_print(f"[QuantSage] Server exited with code {retcode}.")
+        _log_and_print(f"[QuantSage] Log: {_LOG_FILE}")
 
-    print("[QuantSage] Stopped.", flush=True)
+    log.info("QuantSage stopped")
+    _log_and_print("[QuantSage] Stopped.")
     return 0
 
 
