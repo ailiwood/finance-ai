@@ -99,8 +99,16 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config["realtime_data"] = False
         os.environ["DEEPSEEK_API_KEY"] = ds_key
 
+        # Use most recent trading day (not today, which may be weekend/holiday)
+        try:
+            from src.data.market_data import get_kline as _get_kline_for_date
+            _df = _get_kline_for_date(symbol, adjust="qfq", lookback_days=5)
+            analysis_date = _df["date"].max().strftime("%Y-%m-%d")
+        except Exception:
+            analysis_date = datetime.now().strftime("%Y-%m-%d")
+
         ta = TradingAgentsGraph(debug=False, config=ta_config)
-        final_state, decision = ta.propagate(symbol, "2025-06-18")
+        final_state, decision = ta.propagate(symbol, analysis_date)
 
         # Extract decision fields
         safe_decision: dict = {}
