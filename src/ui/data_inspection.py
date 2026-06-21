@@ -52,7 +52,12 @@ def show_data_inspection() -> None:
 
         # Metadata
         st.markdown("### 数据元信息")
-        st.caption(f"复权方式: **前复权 (qfq)** — 与同花顺/东方财富默认一致")
-        st.caption(f"数据源: AkShare (东方财富)")
+        try:
+            from src.data.market_data import get_last_source, get_last_adjust
+            src_label = get_last_source() or "未知"
+            adj_label = get_last_adjust() or "前复权(qfq)"
+        except Exception:
+            src_label, adj_label = "未知", "前复权(qfq)"
+        st.caption(f"数据来源: **{src_label}** | 复权方式: **{adj_label}** — 与同花顺/东方财富默认一致")
         st.caption(f"数据行数: {len(df)}")
         st.caption(f"数据区间: {df['date'].iloc[0].strftime('%Y-%m-%d')} ~ {df['date'].iloc[-1].strftime('%Y-%m-%d')}")
