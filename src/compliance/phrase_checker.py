@@ -162,7 +162,8 @@ def scan_project(root: Path | None = None) -> List[ComplianceViolation]:
         List of all violations found across the project.
     """
     if root is None:
-        root = Path(__file__).resolve().parent.parent.parent
+        from src.deployment.resource_path import get_base_path
+        root = get_base_path()
 
     exclude_dirs = {
         ".git", ".claude", "__pycache__", "venv", ".venv",

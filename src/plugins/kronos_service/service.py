@@ -11,10 +11,11 @@ Start: uvicorn src.plugins.kronos_service.service:app --port 8100
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+
+from src.deployment.resource_path import get_base_path
 
 # Ensure project root on sys.path
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_PROJECT_ROOT = get_base_path()
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 

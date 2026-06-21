@@ -19,16 +19,17 @@ from typing import TypedDict, Optional, Dict, Any
 
 # === Paths ===
 
+# Project .env path (next to CLAUDE.md)
+from src.deployment.resource_path import get_base_path
+_PROJECT_ROOT = get_base_path()
+_ENV_FILE: Path = _PROJECT_ROOT / ".env"
+_ENV_EXAMPLE_FILE: Path = _PROJECT_ROOT / ".env.example"
+
 CONFIG_DIR: Path = Path.home() / ".quantsage"
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 ENCRYPTED_KEYS_FILE: Path = CONFIG_DIR / "encrypted_keys.json"
 FERNET_KEY_FILE: Path = CONFIG_DIR / ".fernet_key"
 DISCLAIMER_ACCEPTED_FILE: Path = CONFIG_DIR / "disclaimer_accepted"
-
-# Project .env path (next to CLAUDE.md)
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_ENV_FILE: Path = _PROJECT_ROOT / ".env"
-_ENV_EXAMPLE_FILE: Path = _PROJECT_ROOT / ".env.example"
 
 
 # === Enums ===

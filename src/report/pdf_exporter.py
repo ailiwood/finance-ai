@@ -15,15 +15,18 @@ from pathlib import Path
 from fpdf import FPDF
 
 from src.compliance.disclaimer import get_pdf_footer_text, get_footer_text
+from src.deployment.resource_path import get_base_path
 
 
 # Unicode CJK font path (auto-detect, prefer single TTF over TTC)
 import re
 
 _CJK_FONT_PATH = None
+_PROJECT_ROOT = get_base_path()
 for _candidate in [
     # Project-bundled font (users can place any CJK .ttf here)
     Path(__file__).resolve().parent / "fonts" / "cjk_font.ttf",
+    _PROJECT_ROOT / "src" / "report" / "fonts" / "cjk_font.ttf",
     # Windows single TTF fonts (avoid .ttc collections)
     "C:/Windows/Fonts/simhei.ttf",
     "C:/Windows/Fonts/simfang.ttf",

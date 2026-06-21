@@ -105,7 +105,7 @@ quantsage/
 > 用里程碑追踪进度，不设时间。整体顺序：**先做通方案 A（M1→M6），再做方案 B（M7）**。
 > 详见 `workflow.md` 第三节。完成一个里程碑就在这里更新勾选状态。
 
-**阶段**：阶段一 · 方案 A（Docker，面向发烧友/懂行用户/作者本人）
+**阶段**：阶段二 · 方案 B（Windows 安装包，商用化）
 
 - [x] **M1 打地基** — Fork TradingAgents-CN，Docker 跑通，分析一只 A股 ✅ (2025-06-20)
 - [x] **M2 配置向导 + 免责关口** — 免责弹窗 + 3步配置向导 + 加密持久化 ✅ (2025-06-20)
@@ -113,13 +113,31 @@ quantsage/
 - [x] **M4 FinBERT 情绪插件** — 情绪打分 + 批量新闻评分 + 情绪指数 ✅ (2025-06-21)
 - [x] **M5 报告 + 合规** — 报告模板 + PDF 导出 + 合规扫描 ✅ (2025-06-21)
 - [x] **M6 方案 A 可分发** — Docker Compose + GPU profiles + 安装指南 ✅ (2025-06-21)
-- [ ] **M7 方案 B**（Windows 安装包，商用化）← *阶段二，M6 稳定后启动*
+- [x] **M7 方案 B**（Windows 安装包 + 商用化）← *进行中 (2026-06-21)*
 
 **阶段一完成！** 仓库: https://github.com/ailiwood/finance-ai
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
+
+### M7 进度
+- [x] Step 1: 资源路径抽象 (`src/packaging/resource_path.py`)
+- [x] Step 2: 桌面启动器 (`src/packaging/launcher.py`)
+- [x] Step 3: PyInstaller spec (`pyinstaller_quantsage.spec`)
+- [x] Step 4: 插件管理器 (`src/packaging/plugin_manager.py` + `src/ui/plugin_manager.py`)
+- [x] Step 5: Inno Setup 安装器 (`installer/quantsage.iss`)
+- [x] Step 6: 优雅降级集成
+- [x] Step 7: 合规 + 许可证登记
+- [ ] Step 8: 测试 + 验证
+
+### M7 架构要点
+- **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包
+- **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
+- **GPU 插件**: 可选 Inno Setup 组件 + 应用内下载管理器，CUDA 12.8 向下兼容 30/40/50 系
+- **TradingAgents-CN**: pip install 后置步骤，不捆绑
+
 **已知问题**：
 - fpdf2 为 LGPLv3 许可证，如需完全合规可替换为 reportlab (BSD)
 - M2 加密密钥存储在 ~/.quantsage/.fernet_key，Windows 下无法 chmod 限制权限
+- PyInstaller 为 GPL 许可证（含 Bootloader Exception），Nuitka (Apache 2.0) 为备选方案
 
 ---
 

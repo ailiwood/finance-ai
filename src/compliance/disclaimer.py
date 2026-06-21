@@ -11,8 +11,8 @@ from pathlib import Path
 from functools import lru_cache
 
 # Path resolution relative to project root
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_DISCLAIMER_PATH = _PROJECT_ROOT / "DISCLAIMER.md"
+from src.deployment.resource_path import get_disclaimer_path
+_DISCLAIMER_PATH = get_disclaimer_path()
 
 # === Parsing utilities ===
 
