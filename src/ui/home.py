@@ -304,7 +304,13 @@ def show_home() -> None:
         if not symbol:
             st.error("请输入股票代码")
         elif not key_status.get("deepseek") == ProviderStatus.CONFIGURED:
-            st.error("请先配置 DeepSeek API Key（配置向导）")
+            ds_status = key_status.get("deepseek")
+            if ds_status == ProviderStatus.INVALID:
+                st.error("DeepSeek API Key 格式无效（需以 sk- 开头且长度≥20字符）")
+            elif ds_status == ProviderStatus.NOT_CONFIGURED:
+                st.error("未配置 DeepSeek API Key。请通过配置向导设置。")
+            else:
+                st.error(f"DeepSeek API Key 状态异常: {ds_status}")
         else:
             global _ANALYSIS_MAILBOX
             _ANALYSIS_MAILBOX = None
