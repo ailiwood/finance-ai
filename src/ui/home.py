@@ -306,7 +306,12 @@ def show_home() -> None:
         elif not key_status.get("deepseek") == ProviderStatus.CONFIGURED:
             ds_status = key_status.get("deepseek")
             if ds_status == ProviderStatus.INVALID:
-                st.error("DeepSeek API Key 格式无效（需以 sk- 开头且长度≥20字符）")
+                st.error("DeepSeek API Key 无法解密或格式无效。请通过配置向导重新填写（可能是重新安装后加密密钥已变更）。")
+                if st.button("重置配置并重新设置", key="reset_config_btn"):
+                    from src.core.config_manager import clear_config
+                    clear_config()
+                    st.session_state.config_complete = False
+                    st.rerun()
             elif ds_status == ProviderStatus.NOT_CONFIGURED:
                 st.error("未配置 DeepSeek API Key。请通过配置向导设置。")
             else:

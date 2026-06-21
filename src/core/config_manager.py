@@ -268,9 +268,16 @@ def load_config() -> QuantSageConfig:
     for key, encrypted_val in encrypted.items():
         try:
             config[key] = decrypt_api_key(encrypted_val)
-        except Exception:
-            # If decryption fails, skip this key
-            pass
+        except Exception as e:
+            # Decryption failed — likely Fernet key regenerated after reinstall.
+            # The old encrypted value is corrupt. Clear it so user can re-configure.
+            import warnings
+            warnings.warn(
+                f"⚠️ 无法解密 '{key}': {e}。可能是重新安装后加密密钥已变更。"
+                f"请在配置向导中重新填写此密钥。"
+            )
+            # Set to empty so validation catches it clearly
+            config[key] = ""
 
     # Layer 3: OS environment variables (highest priority)
     for key in list(config.keys()):
