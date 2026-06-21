@@ -35,7 +35,9 @@ a = Analysis(
     datas=[
         ('DISCLAIMER.md', '.'),
         ('.env.example', '.'),
-        # Bundle src/ as data so Streamlit can find app.py at runtime
+        # Diagnostic wrapper: Streamlit runs this instead of app.py directly
+        (os.path.join(spec_dir, 'run_app.py'), '.'),
+        # Bundle src/ as data so Streamlit can find Python source files
         (os.path.join(spec_dir, 'src'), 'src'),
         # Copy package metadata for packages that use importlib.metadata.version()
         *copy_metadata('streamlit'),
@@ -182,13 +184,12 @@ a = Analysis(
         'peft',
         'sentencepiece',
 
-        # Large scientific (not needed)
+        # Large scientific (not needed at runtime)
         'scipy',
         'scikit-learn',
         'matplotlib',
-        'PIL',
-        'Pillow',
         'cv2',
+        # NOTE: Pillow/PIL is NOT excluded — Streamlit may use it internally
 
         # GUI toolkits (not needed)
         'tkinter',
@@ -200,11 +201,11 @@ a = Analysis(
         'pytest',
         'unittest',
 
-        # Database drivers (not needed for MVP)
-        'sqlite3',
+        # Database drivers (not directly needed, but some are stdlib deps)
         'psycopg2',
         'pymongo',
         'redis',
+        # NOTE: sqlite3 is NOT excluded — Streamlit uses it for caching/sessions
     ],
 )
 

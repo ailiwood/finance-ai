@@ -131,7 +131,8 @@ def _wait_and_open_browser(port: int, no_browser: bool) -> None:
         return
     print(" OK")
 
-    url = f"http://localhost:{port}"
+    # Use 127.0.0.1 (not localhost) to avoid IPv4/IPv6 resolution issues
+    url = f"http://127.0.0.1:{port}"
     if not no_browser:
         print(f"[QuantSage] Opening {url}")
         webbrowser.open(url)
@@ -142,19 +143,30 @@ def _wait_and_open_browser(port: int, no_browser: bool) -> None:
 
 
 def _get_streamlit_script() -> str:
-    """Find the path to src/ui/app.py, respecting PyInstaller bundles."""
-    # In PyInstaller bundle: all source files are in sys._MEIPASS
+    """Find the Streamlit entry script, respecting PyInstaller bundles.
+
+    In frozen mode, prefers run_app.py (diagnostic wrapper) over app.py directly.
+    In source mode, uses app.py directly.
+    """
+    # PyInstaller bundle: prefer run_app.py wrapper, fallback to app.py
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        candidate = Path(sys._MEIPASS) / "src" / "ui" / "app.py"
-        if candidate.exists():
-            return str(candidate)
+        for relpath in ["run_app.py", os.path.join("src", "ui", "app.py")]:
+            candidate = Path(sys._MEIPASS) / relpath
+            if candidate.exists():
+                return str(candidate)
 
-    # Source mode: relative to this file
-    candidate = Path(__file__).resolve().parent.parent / "ui" / "app.py"
-    if candidate.exists():
-        return str(candidate)
+    # Source mode: app.py relative to launcher
+    for relpath in [
+        Path(__file__).resolve().parent.parent / "ui" / "app.py",
+        Path(__file__).resolve().parent.parent.parent / "run_app.py",
+    ]:
+        if relpath.exists():
+            return str(relpath)
 
-    raise FileNotFoundError("Cannot find src/ui/app.py — is the installation complete?")
+    raise FileNotFoundError(
+        "Cannot find Streamlit entry script. "
+        "Make sure run_app.py or src/ui/app.py exists."
+    )
 
 
 def _run_streamlit_inprocess(script_path: str, port: int) -> None:
@@ -172,7 +184,7 @@ def _run_streamlit_inprocess(script_path: str, port: int) -> None:
     _config.set_option("server.headless", True)
     _config.set_option("server.enableCORS", True)
     _config.set_option("server.enableXsrfProtection", False)
-    _config.set_option("browser.serverAddress", "localhost")
+    _config.set_option("browser.serverAddress", "127.0.0.1")
     _config.set_option("browser.serverPort", port)
     _config.set_option("browser.gatherUsageStats", False)
 
@@ -184,7 +196,7 @@ def _run_streamlit_inprocess(script_path: str, port: int) -> None:
         "--server.headless", "true",
         "--server.enableCORS", "true",
         "--server.enableXsrfProtection", "false",
-        "--browser.serverAddress", "localhost",
+        "--browser.serverAddress", "127.0.0.1",
         "--browser.serverPort", str(port),
         "--browser.gatherUsageStats", "false",
     ]
