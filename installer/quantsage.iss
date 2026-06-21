@@ -56,8 +56,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
-; Main application (built by PyInstaller — single-file exe)
-Source: "..\dist\QuantSage_v{#AppVersion}.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Main application (built by PyInstaller — onedir mode)
+Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; ─── Component Selection ───
 [Types]
