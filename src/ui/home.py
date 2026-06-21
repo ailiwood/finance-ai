@@ -99,22 +99,52 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config["realtime_data"] = False
         os.environ["DEEPSEEK_API_KEY"] = ds_key
 
-        # Pass Tushare token if configured (fallback when AkShare unreachable)
+        # Tushare as primary A-share source when token available (more stable than AkShare)
         tushare_token = config.get("tushare_token", "")
         if tushare_token and not tushare_token.startswith("your_"):
             os.environ["TUSHARE_TOKEN"] = tushare_token
             ta_config["tushare_token"] = tushare_token
+            ta_config["preferred_data_source"] = "tushare"
+            os.environ["TA_PREFERRED_DATA_SOURCE"] = "tushare"
 
         # Disable curl_cffi to avoid eastmoney connection issues
         os.environ["AKSHARE_CURL_CFFI_DISABLED"] = "1"
 
-        # Use most recent trading day (not today, which may be weekend/holiday)
+        # Use most recent trading day (handle weekends/holidays)
         try:
             from src.data.market_data import get_kline as _get_kline_for_date
-            _df = _get_kline_for_date(symbol, adjust="qfq", lookback_days=5)
+            _df = _get_kline_for_date(symbol, adjust="qfq", lookback_days=10)
             analysis_date = _df["date"].max().strftime("%Y-%m-%d")
         except Exception:
-            analysis_date = datetime.now().strftime("%Y-%m-%d")
+            # Fallback: if today is weekend, roll back to Friday
+            from datetime import timedelta
+            today = datetime.now()
+            weekday = today.weekday()
+            if weekday == 5:  # Saturday
+                today = today - timedelta(days=1)
+            elif weekday == 6:  # Sunday
+                today = today - timedelta(days=2)
+            analysis_date = today.strftime("%Y-%m-%d")
+
+        # P0-A: Validate data BEFORE LLM analysis — never allow fabricated data
+        try:
+            from src.data.market_data import get_kline as _validate_kline
+            _kline = _validate_kline(symbol, adjust="qfq", lookback_days=10)
+            if _kline is None or _kline.empty or len(_kline) < 3:
+                _ANALYSIS_MAILBOX = {
+                    "error": (
+                        f"数据获取失败：{symbol} 无有效K线数据。"
+                        "可能原因：网络不通、非交易日、或代码错误。"
+                        "请检查网络后重试，或在配置向导中填写 Tushare Token 作为备用数据源。"
+                        "本次分析已终止以确保数据真实性。"
+                    )
+                }
+                return
+        except Exception as _e:
+            _ANALYSIS_MAILBOX = {
+                "error": f"数据获取失败: {str(_e)[:200]}。本次分析已终止。请检查网络或数据源配置。"
+            }
+            return
 
         ta = TradingAgentsGraph(debug=False, config=ta_config)
         final_state, decision = ta.propagate(symbol, analysis_date)
