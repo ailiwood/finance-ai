@@ -119,7 +119,7 @@ quantsage/
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
 
 ### M7 进度
-- [x] 核心打包(onedir + TA-CN捆绑 + 123 tests)
+- [x] 核心打包(onedir + TA-CN捆绑 + 133 tests)
 - [x] 多LLM供应商(14家) + LLM合规审查闸
 - [x] UI深色科技风 + 版权 + 免责声明
 - [x] 数据可靠性: 全qfq + 多源回退(Tushare→AkShare) + 数据体检页
@@ -127,7 +127,9 @@ quantsage/
 - [x] 多周期技术指标(MA/MACD/RSI/KDJ/BOLL, 6周期)
 - [x] 情绪数据源配置(AkShare/Finnhub/Custom)
 - [x] Kronos CPU适配(pick_device cuda→mps→cpu)
-- [x] 134 tests passed
+- [x] 133 tests passed
+- [x] 去除 Fernet 加密层 → 明文 .env 存储（2026-06-22）
+- [x] 配置持久化至 ~/.quantsage/.env（跨 PyInstaller 重启不丢失）
 - [ ] exe打包验证(用户侧)
 
 ### M7 架构要点
@@ -138,8 +140,8 @@ quantsage/
 
 **已知问题**：
 - fpdf2 为 LGPLv3 许可证，如需完全合规可替换为 reportlab (BSD)
-- M2 加密密钥存储在 ~/.quantsage/.fernet_key，Windows 下无法 chmod 限制权限
 - PyInstaller 为 GPL 许可证（含 Bootloader Exception），Nuitka (Apache 2.0) 为备选方案
+- API keys 存为 `.env` 明文文件于 `~/.quantsage/.env`，本地安全依赖用户系统防护
 
 ---
 

@@ -233,9 +233,9 @@ class TestManifest:
 class TestResourcePathIntegration:
     def test_config_manager_uses_resource_path(self):
         """config_manager should use resource_path for env file paths."""
-        from src.core.config_manager import _ENV_FILE, _ENV_EXAMPLE_FILE
+        from src.core.config_manager import _ENV_FILE, _ENV_TEMPLATE
         assert _ENV_FILE.name == ".env"
-        assert _ENV_EXAMPLE_FILE.name == ".env.example"
+        assert _ENV_TEMPLATE.name == ".env.example"
 
     def test_disclaimer_uses_resource_path(self):
         """disclaimer.py should use get_disclaimer_path."""

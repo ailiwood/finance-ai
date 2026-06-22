@@ -1,7 +1,13 @@
-"""QuantSage configuration manager with encrypted persistence.
+"""QuantSage configuration manager — plaintext .env storage.
 
-Stores plaintext settings in .env and sensitive keys encrypted
-in ~/.quantsage/encrypted_keys.json using Fernet symmetric encryption.
+API keys are stored as plaintext in the local .env file.
+QuantSage runs locally and never transmits data; encryption adds
+complexity without meaningful security benefit in this context.
+
+Guards that remain:
+- Keys are .strip()'d on read (never fail on whitespace)
+- Full keys are NEVER logged or written to reports
+- Only masked prefix/suffix appears in debug output
 
 Red Line 5 compliance: API keys NEVER written to code, uploaded, or logged.
 """
@@ -10,26 +16,34 @@ from __future__ import annotations
 
 import json
 import os
-import base64
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import TypedDict, Optional, Dict, Any
 
+logger = logging.getLogger("quantsage.config")
 
 # === Paths ===
 
-# Project .env path (next to CLAUDE.md)
+# Project .env path (next to CLAUDE.md) — template source only
 from src.deployment.resource_path import get_base_path
 _PROJECT_ROOT = get_base_path()
-_ENV_FILE: Path = _PROJECT_ROOT / ".env"
-_ENV_EXAMPLE_FILE: Path = _PROJECT_ROOT / ".env.example"
+_ENV_TEMPLATE: Path = _PROJECT_ROOT / ".env.example"
+# Project-local .env (used in dev mode, but disposable in PyInstaller builds)
+_ENV_PROJECT: Path = _PROJECT_ROOT / ".env"
 
 CONFIG_DIR: Path = Path.home() / ".quantsage"
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
-ENCRYPTED_KEYS_FILE: Path = CONFIG_DIR / "encrypted_keys.json"
-FERNET_KEY_FILE: Path = CONFIG_DIR / ".fernet_key"
+# Persistent .env in user home — survives PyInstaller temp dir recreation
+_ENV_USER: Path = CONFIG_DIR / ".env"
+# Primary .env: store in user home for persistence
+_ENV_FILE: Path = _ENV_USER
 DISCLAIMER_ACCEPTED_FILE: Path = CONFIG_DIR / "disclaimer_accepted"
+
+# Legacy files — kept for migration cleanup only
+_LEGACY_ENCRYPTED_KEYS_FILE: Path = CONFIG_DIR / "encrypted_keys.json"
+_LEGACY_FERNET_KEY_FILE: Path = CONFIG_DIR / ".fernet_key"
 
 
 # === Enums ===
@@ -74,67 +88,40 @@ class QuantSageConfig(TypedDict, total=False):
     log_level: str
 
 
-# Fields that must be encrypted (match by suffix)
-_ENCRYPTED_FIELD_SUFFIXES = ("_api_key", "_token", "_secret")
-
-
-# === Fernet encryption ===
-
-def _get_or_create_fernet():
-    """Load or create the Fernet encryption key.
-
-    The key is stored at ~/.quantsage/.fernet_key with restrictive permissions.
-    """
-    from cryptography.fernet import Fernet
-
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-    if FERNET_KEY_FILE.exists():
-        key = FERNET_KEY_FILE.read_bytes()
-        if not key:
-            raise ValueError("Fernet key file is empty. Delete ~/.quantsage/ and restart.")
-        return Fernet(key)
-
-    # Generate new key
-    key = Fernet.generate_key()
-    FERNET_KEY_FILE.write_bytes(key)
-    # Set restrictive permissions on Unix
-    try:
-        FERNET_KEY_FILE.chmod(0o600)
-        CONFIG_DIR.chmod(0o700)
-    except (OSError, NotImplementedError):
-        pass  # Windows does not support chmod
-
-    return Fernet(key)
-
-
-def encrypt_api_key(key: str) -> str:
-    """Encrypt an API key. Returns base64-encoded encrypted bytes as string."""
-    if not key:
-        return ""
-    fernet = _get_or_create_fernet()
-    encrypted = fernet.encrypt(key.encode("utf-8"))
-    return base64.b64encode(encrypted).decode("ascii")
-
-
-def decrypt_api_key(encrypted: str) -> str:
-    """Decrypt an API key. Returns the plaintext key."""
-    if not encrypted:
-        return ""
-    fernet = _get_or_create_fernet()
-    raw = base64.b64decode(encrypted.encode("ascii"))
-    return fernet.decrypt(raw).decode("utf-8")
-
-
 # === .env file management ===
 
 def _ensure_env_exists() -> Path:
-    """Ensure .env file exists, creating from .env.example if needed."""
-    if not _ENV_FILE.exists() and _ENV_EXAMPLE_FILE.exists():
-        _ENV_FILE.write_text(_ENV_EXAMPLE_FILE.read_text(encoding="utf-8"), encoding="utf-8")
-    elif not _ENV_FILE.exists():
-        _ENV_FILE.write_text("", encoding="utf-8")
-    return _ENV_FILE
+    """Ensure persistent .env file exists, creating from template if needed.
+
+    Priority:
+    1. ~/.quantsage/.env (persistent, survives PyInstaller re-extraction)
+    2. Project .env (dev mode fallback — if it has real keys, migrate them)
+    3. Copy from .env.example template
+    """
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if _ENV_USER.exists():
+        return _ENV_USER
+
+    # If project .env exists and has real content (not placeholders),
+    # migrate it to the persistent location
+    if _ENV_PROJECT.exists():
+        content = _ENV_PROJECT.read_text(encoding="utf-8")
+        # Check if it has actual keys (not just the template)
+        if any(
+            marker in content
+            for marker in ("sk-", "ak-", "fp_", "DEEPSEEK_API_KEY=sk-", "OPENAI_API_KEY=sk-")
+        ):
+            _ENV_USER.write_text(content, encoding="utf-8")
+            logger.info("[CONFIG] Migrated project .env to ~/.quantsage/.env for persistence")
+            return _ENV_USER
+
+    # Create from template
+    if _ENV_TEMPLATE.exists():
+        _ENV_USER.write_text(_ENV_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        _ENV_USER.write_text("", encoding="utf-8")
+    return _ENV_USER
 
 
 def _read_env_file() -> Dict[str, str]:
@@ -187,40 +174,18 @@ def _write_env_file(env_vars: Dict[str, str]) -> None:
     env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
-# === Encrypted keys storage ===
+# === Helper: masked key logging ===
 
-def _read_encrypted_keys() -> Dict[str, str]:
-    """Read encrypted keys from ~/.quantsage/encrypted_keys.json."""
-    if not ENCRYPTED_KEYS_FILE.exists():
-        return {}
-    try:
-        data = json.loads(ENCRYPTED_KEYS_FILE.read_text(encoding="utf-8"))
-        # data has _meta and key-value pairs of encrypted strings
-        return {k: v for k, v in data.items() if not k.startswith("_")}
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def _write_encrypted_keys(keys: Dict[str, str]) -> None:
-    """Write encrypted keys to ~/.quantsage/encrypted_keys.json."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    data: Dict[str, Any] = {
-        "_meta": {
-            "version": 1,
-            "updated": datetime.now(timezone.utc).isoformat(),
-        }
-    }
-    data.update(keys)
-    ENCRYPTED_KEYS_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+def _mask_key(key: str) -> str:
+    """Return a safe-for-log representation of an API key."""
+    if not key:
+        return "<empty>"
+    if len(key) <= 8:
+        return "****"
+    return f"{key[:4]}****{key[-4:]}"
 
 
 # === Config load/save ===
-
-def _is_sensitive_field(key: str) -> bool:
-    """Check if a config key should be encrypted."""
-    return any(key.endswith(suffix) for suffix in _ENCRYPTED_FIELD_SUFFIXES)
 
 
 def _parse_env_to_config(env_vars: Dict[str, str]) -> Dict[str, Any]:
@@ -250,9 +215,9 @@ def _parse_env_to_config(env_vars: Dict[str, str]) -> Dict[str, Any]:
 def load_config() -> QuantSageConfig:
     """Load full configuration.
 
-    Resolution order:
-    1. .env file (plaintext, lower priority)
-    2. encrypted_keys.json (for sensitive fields, higher priority)
+    Resolution order (last wins):
+    1. .env file (plaintext key storage)
+    2. One-time migration from legacy encrypted_keys.json (if .env has ___ENCRYPTED___)
     3. OS environment variables (highest priority, for Docker/CI)
 
     Returns merged QuantSageConfig dict.
@@ -263,21 +228,10 @@ def load_config() -> QuantSageConfig:
     env_vars = _read_env_file()
     config.update(_parse_env_to_config(env_vars))
 
-    # Layer 2: encrypted keys (override .env for sensitive fields)
-    encrypted = _read_encrypted_keys()
-    for key, encrypted_val in encrypted.items():
-        try:
-            config[key] = decrypt_api_key(encrypted_val)
-        except Exception as e:
-            # Decryption failed — likely Fernet key regenerated after reinstall.
-            # The old encrypted value is corrupt. Clear it so user can re-configure.
-            import warnings
-            warnings.warn(
-                f"⚠️ 无法解密 '{key}': {e}。可能是重新安装后加密密钥已变更。"
-                f"请在配置向导中重新填写此密钥。"
-            )
-            # Set to empty so validation catches it clearly
-            config[key] = ""
+    # Layer 2: One-time migration from legacy encrypted keys
+    # If .env still has ___ENCRYPTED___ placeholders (from pre-plaintext version),
+    # try to recover the real keys from encrypted_keys.json and write to .env
+    _migrate_legacy_encrypted(config)
 
     # Layer 3: OS environment variables (highest priority)
     for key in list(config.keys()):
@@ -285,64 +239,159 @@ def load_config() -> QuantSageConfig:
         if env_val is not None and env_val != "":
             config[key] = env_val
 
+    # Debug: log masked keys for troubleshooting
+    for sensitive_key in ("deepseek_api_key", "dashscope_api_key", "tushare_token"):
+        val = config.get(sensitive_key, "")
+        if val:
+            logger.info(
+                "[CONFIG] %s: len=%d, masked=%s, is_placeholder=%s",
+                sensitive_key, len(val), _mask_key(val),
+                any(m in val.lower() for m in ("your_", "your-", "_here", "-here", "..."))
+            )
+
     return config  # type: ignore[return-value]
 
 
-def save_config(config: QuantSageConfig) -> None:
-    """Save configuration.
+def _migrate_legacy_encrypted(config: Dict[str, Any]) -> None:
+    """One-time migration: recover keys from legacy encrypted_keys.json.
 
-    - Non-sensitive fields -> .env file (plaintext)
-    - Sensitive fields (API keys, tokens) -> encrypted_keys.json ONLY
-    - Sensitive fields are set to placeholder in .env
+    If .env has ___ENCRYPTED___ placeholders (from the Fernet encryption era),
+    attempt to decrypt and write them as plaintext to .env, then delete the
+    legacy files.
     """
-    # Split into sensitive and non-sensitive
-    env_vars: Dict[str, str] = {}
-    encrypted_keys: Dict[str, str] = {}
+    if not _LEGACY_ENCRYPTED_KEYS_FILE.exists():
+        return
 
+    # Check if any field still has the legacy placeholder
+    needs_migration = any(
+        str(v) == "___ENCRYPTED___"
+        for k, v in config.items()
+        if k.endswith(("_api_key", "_token", "_secret"))
+    )
+    if not needs_migration:
+        # No migration needed — but still clean up legacy files
+        _cleanup_legacy_files()
+        return
+
+    # Try to decrypt using legacy Fernet key
+    try:
+        from cryptography.fernet import Fernet
+        import base64
+
+        if not _LEGACY_FERNET_KEY_FILE.exists():
+            logger.warning(
+                "[CONFIG] Found encrypted_keys.json but no .fernet_key — "
+                "cannot migrate. Please re-configure API keys in the wizard."
+            )
+            return
+
+        fernet_key = _LEGACY_FERNET_KEY_FILE.read_bytes()
+        if not fernet_key:
+            return
+        fernet = Fernet(fernet_key)
+
+        legacy_data = json.loads(_LEGACY_ENCRYPTED_KEYS_FILE.read_text(encoding="utf-8"))
+        migrated = 0
+        for key, encrypted_val in legacy_data.items():
+            if key.startswith("_"):
+                continue
+            if key not in config:
+                continue
+            current_val = str(config.get(key, ""))
+            if current_val not in ("___ENCRYPTED___", ""):
+                continue  # Already has a real value
+            try:
+                raw = base64.b64decode(encrypted_val.encode("ascii"))
+                plaintext = fernet.decrypt(raw).decode("utf-8")
+                config[key] = plaintext
+                migrated += 1
+                logger.info(
+                    "[CONFIG] Migrated %s from legacy encrypted storage: len=%d, masked=%s",
+                    key, len(plaintext), _mask_key(plaintext),
+                )
+            except Exception as e:
+                logger.warning("[CONFIG] Failed to decrypt legacy '%s': %s", key, e)
+
+        if migrated > 0:
+            # Persist the migrated keys to .env as plaintext
+            save_config(config)
+            logger.info(
+                "[CONFIG] Migrated %d keys from encrypted storage to plaintext .env",
+                migrated,
+            )
+
+    except ImportError:
+        logger.warning(
+            "[CONFIG] cryptography not installed — cannot migrate legacy keys. "
+            "Please re-configure API keys in the wizard."
+        )
+    except Exception as e:
+        logger.warning("[CONFIG] Legacy migration failed: %s", e)
+
+    # Clean up legacy files regardless of migration success
+    _cleanup_legacy_files()
+
+
+def _cleanup_legacy_files() -> None:
+    """Remove legacy encrypted keys and fernet key files."""
+    for legacy_file in (_LEGACY_ENCRYPTED_KEYS_FILE, _LEGACY_FERNET_KEY_FILE):
+        if legacy_file.exists():
+            try:
+                legacy_file.unlink()
+                logger.info("[CONFIG] Cleaned up legacy file: %s", legacy_file.name)
+            except OSError:
+                pass
+
+
+def save_config(config: QuantSageConfig) -> None:
+    """Save configuration to .env as plaintext.
+
+    All fields (including API keys) are stored directly in .env.
+    No encryption layer — QuantSage runs locally and never transmits data.
+    """
+    env_vars: Dict[str, str] = {}
     for key, value in config.items():
         env_key = key.upper()
-        if _is_sensitive_field(key):
-            # Encrypt and store in encrypted keys file
-            str_val = str(value) if value else ""
-            if str_val:
-                encrypted_keys[key] = encrypt_api_key(str_val)
-            # Set placeholder in .env (never plaintext)
-            env_vars[env_key] = "___ENCRYPTED___" if str_val else f"your_{key}_here"
+        str_val = str(value) if value else ""
+        if isinstance(value, bool):
+            env_vars[env_key] = "true" if value else "false"
         else:
-            # Plaintext to .env
-            if isinstance(value, bool):
-                env_vars[env_key] = "true" if value else "false"
-            else:
-                env_vars[env_key] = str(value)
+            env_vars[env_key] = str_val
 
     _write_env_file(env_vars)
-    if encrypted_keys:
-        _write_encrypted_keys(encrypted_keys)
+
+    # Clean up legacy encrypted keys file if it exists (migration)
+    if _LEGACY_ENCRYPTED_KEYS_FILE.exists():
+        try:
+            _LEGACY_ENCRYPTED_KEYS_FILE.unlink()
+            logger.info("[CONFIG] Removed legacy encrypted_keys.json (migrated to plaintext)")
+        except OSError:
+            pass
+    if _LEGACY_FERNET_KEY_FILE.exists():
+        try:
+            _LEGACY_FERNET_KEY_FILE.unlink()
+            logger.info("[CONFIG] Removed legacy .fernet_key (migrated to plaintext)")
+        except OSError:
+            pass
 
 
 # === Key validation ===
 
 def validate_api_key(provider: str, key: str) -> bool:
-    """Minimal key validation — only reject empty or placeholder keys.
+    """Check that a key is non-empty and not a placeholder.
 
-    Different providers have DIFFERENT key formats (sk-/ak-/Bearer/...).
-    We do NOT guess format — real validity is determined by actual API call.
+    NO format validation — different providers have different key formats
+    (sk-/ak-/Bearer/fp_/...). Real validity is determined by actual API call.
     """
     if not key or not key.strip():
         return False
 
     # Only reject obvious placeholder/default values
-    placeholder_markers = ["your_", "your-", "_here", "-here", "..."]
+    placeholder_markers = ["your_", "your-", "_here", "-here", "...", "___encrypted___"]
     key_lower = key.lower()
     if any(marker in key_lower for marker in placeholder_markers):
         return False
 
-    # Tushare: basic sanity check (token is typically 20+ chars)
-    if provider == "tushare" and len(key.strip()) < 10:
-        return False
-
-    # All other providers: any non-empty, non-placeholder key is accepted.
-    # Real validity is tested via the "test connection" API call.
     return True
 
 
@@ -430,17 +479,19 @@ def test_llm_connection(provider: str, key: str) -> tuple[bool, str]:
 def clear_config() -> None:
     """Remove all local config files. Used for 'reset configuration'."""
     files_to_remove = [
-        ENCRYPTED_KEYS_FILE,
-        FERNET_KEY_FILE,
-        DISCLAIMER_ACCEPTED_FILE,
         CONFIG_FILE,
+        DISCLAIMER_ACCEPTED_FILE,
+        _ENV_USER,
+        # Legacy encrypted files
+        _LEGACY_ENCRYPTED_KEYS_FILE,
+        _LEGACY_FERNET_KEY_FILE,
     ]
     for f in files_to_remove:
         if f.exists():
             f.unlink()
-    # Also reset .env to example
-    if _ENV_FILE.exists() and _ENV_EXAMPLE_FILE.exists():
-        _ENV_FILE.write_text(_ENV_EXAMPLE_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+    # Re-create user .env from template
+    if _ENV_TEMPLATE.exists():
+        _ENV_USER.write_text(_ENV_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 # === Disclaimer acceptance ===

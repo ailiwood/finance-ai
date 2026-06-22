@@ -88,6 +88,10 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
             _ANALYSIS_MAILBOX = {"error": "未配置 DeepSeek API Key"}
             return
 
+        # Debug: log masked key so user can verify it matches what they configured
+        ds_masked = ds_key[:4] + "****" + ds_key[-4:] if len(ds_key) > 8 else "****"
+        print(f"[DEBUG] _run_analysis: DEEPSEEK_API_KEY len={len(ds_key)}, masked={ds_masked}")
+
         ta_config = DEFAULT_CONFIG.copy()
         ta_config["llm_provider"] = "deepseek"
         ta_config["backend_url"] = "https://api.deepseek.com"
