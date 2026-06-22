@@ -25,12 +25,18 @@ except Exception:
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path (for `streamlit run` from project root)
+# ── Logging: file + console, must be first ──
+from src.core.logging_config import setup_logging
+_log = setup_logging()
+
+# Ensure project root and TA-CN are on sys.path (for `streamlit run`)
 # Use resource_path for PyInstaller compatibility
 from src.deployment.resource_path import get_base_path
 _PROJECT_ROOT = get_base_path()
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_TA_CN_DIR = _PROJECT_ROOT / "TradingAgents-CN"
+for _p in (str(_PROJECT_ROOT), str(_TA_CN_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import streamlit as st
 
