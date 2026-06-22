@@ -603,7 +603,7 @@ def show_home() -> None:
         return
 
     # ── Bottom actions ──
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         if st.button("重新配置", use_container_width=True, key="reconfig_btn"):
             st.session_state.config_complete = False
@@ -632,6 +632,126 @@ def show_home() -> None:
             from src.core.config_manager import clear_config
             clear_config()
             st.session_state.config_complete = False
+            st.rerun()
+    with col6:
+        if st.button("金融学习", use_container_width=True, key="learn_btn"):
+            st.session_state.show_learning = not st.session_state.get("show_learning", False)
+            st.rerun()
+
+    # ── Financial Learning Hub ──
+    if st.session_state.get("show_learning", False):
+        st.markdown("---")
+        st.markdown("## 金融知识学习中心")
+        st.caption("精选免费学习资源，从入门到精通。点击链接在新标签页打开。")
+
+        tab1, tab2, tab3, tab4 = st.tabs(["入门基础", "进阶分析", "高级量化", "常用术语速查"])
+
+        with tab1:
+            st.markdown("### 入门基础 — 建立金融世界观")
+            st.markdown("""
+**现代金融体系入门**
+- [可汗学院 · 金融与资本市场 (中文字幕)](https://www.khanacademy.org/economics-finance-domain/core-finance) — 免费、零基础友好，解释股票/债券/市场如何运作
+- [Investopedia 金融百科 (英文)](https://www.investopedia.com/) — 最全面的金融词典，每个术语都有详细解释和案例
+- [国家中小学智慧教育平台 · 财经素养](https://basic.smartedu.cn/) — 中文入门，适合建立基本概念
+
+**股市基础**
+- [上海证券交易所 · 投资者教育](https://edu.sse.com.cn/) — 官方出品，A股交易规则、信息披露、风险提示
+- [深圳证券交易所 · 投资者学院](https://www.szse.cn/investor/) — 深交所官方教程
+- [雪球 · 新手入门指南](https://xueqiu.com/topic/newbie) — 中文社区，实战经验丰富
+
+**价值投资入门**
+- [巴菲特致股东的信 (中文版)](https://www.berkshirehathaway.com/letters/letters.html) — 价值投资圣经
+- [聪明的投资者 (格雷厄姆) — 豆瓣](https://book.douban.com/subject/5243775/) — 价值投资奠基之作
+- [彼得·林奇的成功投资 — 豆瓣](https://book.douban.com/subject/1052698/) — 通俗易懂的选股逻辑
+""")
+
+        with tab2:
+            st.markdown("### 进阶分析 — 基本面 + 技术面")
+            st.markdown("""
+**基本面分析**
+- [东方财富 · 财务数据](https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html) — A股财报、PE/PB/ROE 免费查询
+- [同花顺 · 个股F10](https://www.10jqka.com.cn/) — 完整的基本面数据面板
+- [晨星中国](https://www.morningstar.cn/) — 专业的基金/股票评级和分析
+- [GuruFocus (中英文)](https://www.gurufocus.com/) — 价值投资筛选工具
+
+**技术分析**
+- [技术指标详解 (Investopedia)](https://www.investopedia.com/terms/t/technicalanalysis.asp) — MA/MACD/RSI/KDJ/BOLL 的官方解释
+- [TradingView · 图表学院](https://www.tradingview.com/chart/) — 全球最大的图表社区，实战画线
+- [通达信公式教程](https://help.tdx.com.cn/) — A股最常用的技术分析软件
+
+**市场情绪与行为金融**
+- [丹尼尔·卡尼曼 · 思考快与慢](https://book.douban.com/subject/10785583/) — 诺贝尔奖得主的行为经济学
+- [彭博市场情绪指数](https://www.bloomberg.com/markets/sentiment) — 专业级市场情绪数据
+""")
+
+        with tab3:
+            st.markdown("### 高级量化 — 系统化交易")
+            st.markdown("""
+**量化交易入门**
+- [QuantConnect · 量化学习 (英文)](https://www.quantconnect.com/learning/) — 免费的量化交易课程，含Python代码
+- [JoinQuant 聚宽 · 量化课堂 (中文)](https://www.joinquant.com/help) — 国内最大量化平台，中文教程
+- [BigQuant · AI量化平台](https://bigquant.com/) — AI赋能量化投资
+
+**Python 金融编程**
+- [Python for Finance (O'Reilly)](https://book.douban.com/subject/27051268/) — 用Python分析金融数据的经典书
+- [Yahoo Finance + pandas 教程](https://pandas.pydata.org/docs/getting_started/intro_tutorials/09_timeseries.html) — 时间序列分析基础
+- [QuantSage GitHub](https://github.com/ailiwood/finance-ai) — 本项目开源代码
+
+**数学与统计**
+- [3Blue1Brown · 线性代数的本质 (B站)](https://space.bilibili.com/88461692) — 最直观的数学可视化
+- [MIT 18.06 线性代数 (OpenCourseWare)](https://ocw.mit.edu/courses/18-06sc-linear-algebra-fall-2011/) — 量化必学
+- [统计学入门 (Khan Academy)](https://www.khanacademy.org/math/statistics-probability) — 免费、交互式
+
+**风险管理**
+- [风险管理的艺术 (Taleb)](https://book.douban.com/subject/26420513/) — 黑天鹅作者的风险哲学
+- [VaR与压力测试 (CFA教材)](https://www.cfainstitute.org/) — CFA官方风险管理框架
+""")
+
+        with tab4:
+            st.markdown("### 股市常用术语速查")
+            st.markdown("""
+**基础术语**
+| 术语 | 解释 |
+|------|------|
+| 股票 | 公司所有权的凭证，买入股票 = 成为公司股东 |
+| A股 | 在中国大陆上市交易的股票，以人民币计价 |
+| 大盘 | 反映整个市场走势的指数（上证综指、深证成指、沪深300） |
+| 牛市/熊市 | 市场持续上涨的时期 / 持续下跌的时期 |
+| 成交量 | 一段时间内交易的股票数量，反映市场活跃度 |
+| 换手率 | 成交量 ÷ 流通股本，反映股票流动性 |
+
+**估值术语**
+| 术语 | 含义 |
+|------|------|
+| PE (市盈率) | 股价 ÷ 每股收益。越低越"便宜"，但也要看成长性 |
+| PB (市净率) | 股价 ÷ 每股净资产。低于1可能被低估 |
+| ROE (净资产收益率) | 净利润 ÷ 净资产。衡量公司赚钱效率，>15% 较优秀 |
+| EPS (每股收益) | 净利润 ÷ 总股本。每股赚多少钱 |
+| 股息率 | 每股分红 ÷ 股价。高股息率 = 现金回报好 |
+
+**技术指标术语**
+| 指标 | 含义 |
+|------|------|
+| MA (移动平均线) | 过去N天的平均收盘价。MA5/10/20/60分别代表短期/中期趋势 |
+| MACD | 指数平滑异同移动平均线。金叉看涨，死叉看跌 |
+| RSI (相对强弱指数) | 0-100，>70超买(可能回调)，<30超卖(可能反弹) |
+| KDJ | 随机指标，反映价格在一段时间内的相对位置 |
+| BOLL (布林带) | 股价的"波动轨道"，触及上轨可能回落，触及下轨可能反弹 |
+| 金叉/死叉 | 短期均线上穿长期均线(看涨) / 下穿(看跌) |
+
+**交易术语**
+| 术语 | 含义 |
+|------|------|
+| 做多 | 先买后卖，赚涨的钱 |
+| 做空 | 先卖后买，赚跌的钱（A股融券做空门槛高） |
+| 止损 | 预设一个亏损上限，到了就卖出控制损失 |
+| 仓位 | 已买入股票的资金占总资金的比例。满仓=全买，空仓=全卖 |
+| T+1 | A股今天买入，最早明天才能卖出 |
+| 涨停/跌停 | A股每日涨跌幅上限(主板±10%，科创/创业±20%) |
+""")
+
+        if st.button("收起学习中心", key="hide_learning"):
+            st.session_state.show_learning = False
             st.rerun()
 
     # Footer disclaimer
