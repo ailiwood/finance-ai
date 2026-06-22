@@ -81,7 +81,6 @@ def setup_logging(level: int = logging.INFO, to_console: bool = True) -> logging
     logger.info("QuantSage started — log file: %s", log_file)
     logger.info("=" * 50)
 
-    global _LOGGING_INITIALIZED
     _LOGGING_INITIALIZED = True
     return logger
 
