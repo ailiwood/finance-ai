@@ -195,6 +195,39 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         _ANALYSIS_MAILBOX = {"error": str(e)}
 
 
+def _show_history_page() -> None:
+    """Display the report history browser."""
+    from src.report.history import load_history, load_report
+    st.markdown("## 历史分析报告")
+    st.caption("每次分析完成后自动存档。点击可查看详情。")
+
+    history = load_history()
+    if not history:
+        st.info("暂无历史报告。完成一次股票分析后，报告将自动保存于此。")
+        if st.button("返回首页", key="back_home_history_empty"):
+            st.session_state.show_history = False
+            st.rerun()
+        return
+
+    for i, entry in enumerate(history[:30]):
+        with st.expander(
+            f"{entry.get('analyzed_at','?')} | {entry.get('symbol','?')} {entry.get('stock_name','?')} "
+            f"| {entry.get('action','?')} | 置信度:{entry.get('confidence',0):.0%}",
+            expanded=(i == 0)
+        ):
+            data = load_report(entry.get("file", ""))
+            if data:
+                st.markdown(data.get("report", "")[:3000])
+                if len(data.get("report", "")) > 3000:
+                    st.caption("... (报告较长，仅显示前3000字)")
+            else:
+                st.caption("(报告文件已丢失)")
+
+    if st.button("返回首页", key="back_home_history"):
+        st.session_state.show_history = False
+        st.rerun()
+
+
 def show_home() -> None:
     """Render the post-configuration home page with real analysis capability."""
     st.markdown(CSS_HOME, unsafe_allow_html=True)
@@ -441,6 +474,23 @@ def show_home() -> None:
                 st.session_state.analysis_error = result["error"]
             else:
                 st.session_state.analysis_result = result
+                # Auto-save to history
+                try:
+                    from src.report.history import save_report
+                    from src.monitor import get_trace_id
+                    _d = result.get("decision", {})
+                    _r = result.get("agent_reports", {})
+                    _raw_report = "\n\n".join(str(v) for v in _r.values() if v)
+                    save_report(
+                        result.get("symbol", "?"),
+                        result.get("stock_name", result.get("symbol", "?")),
+                        result.get("market", "A股"),
+                        _raw_report,
+                        _d,
+                        get_trace_id(),
+                    )
+                except Exception:
+                    pass
             st.session_state.analysis_running = False
             st.rerun()
 
@@ -615,7 +665,13 @@ def show_home() -> None:
         return
 
     # ── Bottom actions ──
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    # ── History Toggle ──
+    if st.session_state.get("show_history", False):
+        _show_history_page()
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
     with col1:
         if st.button("重新配置", use_container_width=True, key="reconfig_btn"):
             st.session_state.config_complete = False
@@ -664,6 +720,10 @@ def show_home() -> None:
                 st.success(f"诊断包已生成：{zip_path}")
             except Exception as e:
                 st.error(f"生成诊断包失败：{e}")
+    with col8:
+        if st.button("历史报告", use_container_width=True, key="history_btn"):
+            st.session_state.show_history = True
+            st.rerun()
 
     # ── Financial Learning Hub ──
     if st.session_state.get("show_learning", False):
