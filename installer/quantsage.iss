@@ -1,12 +1,13 @@
 ; QuantSage Windows Installer — Inno Setup Script
 ; ================================================
-; Flow: Welcome -> Disclaimer -> Purchase License ($19.9) -> Serial -> Install
-; License validation: offline checksum-based (no server needed)
+; Flow: Welcome -> Disclaimer -> Purchase License -> Serial -> Install
+; License validation: offline 16-bit checksum (no server needed)
+; Language: Simplified Chinese
 
 #define AppName "QuantSage"
 #define AppVersion "1.0.0"
 #define AppPublisher "ailiwood"
-#define AppURL "https://github.com/ailiwood/finance-ai"
+#define AppURL ""
 #define LicensePrice "19.90 RMB"
 
 [Setup]
@@ -33,7 +34,7 @@ WizardStyle=modern
 SetupLogging=yes
 
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinese"; MessagesFile: "assets\ChineseSimplified.isl"
 
 [Files]
 Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
@@ -58,7 +59,7 @@ Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; Work
 Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\QuantSage_v{#AppVersion}.exe"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent shellexec; Components: core
+Filename: "{app}\QuantSage_v{#AppVersion}.exe"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent shellexec; Components: core
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
@@ -73,18 +74,17 @@ var
   QrImage: TBitmapImage;
   SerialValid: Boolean;
 
-// ── Offline license key validation (modular checksum, matches keygen.py) ──
-// Key format: QS-XXXX-YYYY-ZZZZ-WWWW (4 hex groups of 4)
-// Checksum: (XXXX_val * 6719 + YYYY_val * 31790 + 1589039500) mod 65536
-//           then multiplied by 65537 must equal ZZZZ_WWWW as a 32-bit int
+// ── Offline license key validation (16-bit math, safe for Pascal) ──
+// Key format: QS-XXXX-YYYY-ZZZZ-WWWW
+// Checksum (16-bit): ZZZZ = (XXXX_val + YYYY_val + 0x5E9D) mod 65536
+// Inverse:         WWWW = 0xFFFF - ZZZZ
+// All operations stay within 32-bit integers — safe for Pascal Int64.
 function ValidateLicenseKey(Key: String): Boolean;
 var
   CleanKey: String;
-  P1Str, P2Str, CSStr: String;
-  P1Val, P2Val, ActualCS, ExpectedCS: Int64;
+  P1Val, P2Val, CSVal, InvVal: Integer;
+  ExpectedCS, ExpectedInv: Integer;
   I: Integer;
-  MULT1, MULT2, SECRET: Int64;
-  ModVal: Int64;
 begin
   CleanKey := Uppercase(Key);
   StringChangeEx(CleanKey, ' ', '', True);
@@ -93,7 +93,7 @@ begin
   if Length(CleanKey) <> 18 then begin Result := False; Exit; end;
   if Copy(CleanKey, 1, 2) <> 'QS' then begin Result := False; Exit; end;
 
-  // Validate hex (Inno Pascal: no set range literals)
+  // Validate all hex chars
   for I := 3 to 18 do
   begin
     if not (((CleanKey[I] >= '0') and (CleanKey[I] <= '9')) or
@@ -101,25 +101,18 @@ begin
     begin Result := False; Exit; end;
   end;
 
-  // Parse
-  P1Str := Copy(CleanKey, 3, 4);
-  P2Str := Copy(CleanKey, 7, 4);
-  CSStr := Copy(CleanKey, 11, 8);
+  // Parse — use StrToInt (32-bit), all values are 0-65535
+  P1Val := StrToInt('$' + Copy(CleanKey, 3, 4));     // XXXX
+  P2Val := StrToInt('$' + Copy(CleanKey, 7, 4));     // YYYY
+  CSVal := StrToInt('$' + Copy(CleanKey, 11, 4));    // ZZZZ
+  InvVal := StrToInt('$' + Copy(CleanKey, 15, 4));   // WWWW
 
-  P1Val := StrToInt64('$' + P1Str);
-  P2Val := StrToInt64('$' + P2Str);
-  ActualCS := StrToInt64('$' + CSStr);
+  // Core check: ZZZZ = (P1 + P2 + 0x5E9D) mod 65536
+  ExpectedCS := (P1Val + P2Val + 24221) mod 65536;   // 0x5E9D = 24221
+  ExpectedInv := (65535 - ExpectedCS);                 // 0xFFFF - CS
 
-  MULT1 := 6719;   // 0x1A3F
-  MULT2 := 31790;  // 0x7C2E
-  SECRET := 1589039500;  // 0x5E9D2B8C
-
-  // Core check: (P1*M1 + P2*M2 + SECRET) mod 0x10000, then * 0x10001
-  ModVal := (P1Val * MULT1 + P2Val * MULT2 + SECRET) mod 65536;
-  ExpectedCS := ModVal * 65537;  // 0x10001
-
-  // Allow tolerance of 10 for 32-bit vs 64-bit rounding differences
-  Result := (ActualCS >= ExpectedCS - 10) and (ActualCS <= ExpectedCS + 10);
+  // Exact match required — no tolerance needed with pure 16-bit math
+  Result := (CSVal = ExpectedCS) and (InvVal = ExpectedInv);
 end;
 
 // ── Serial page: on next, validate key ──
@@ -130,7 +123,7 @@ begin
   InputKey := LicensePage.Values[0];
   if InputKey = '' then
   begin
-    MsgBox('Please enter your license key before continuing.', mbError, MB_OK);
+    MsgBox('请输入许可证密钥。', mbError, MB_OK);
     Result := False;
     Exit;
   end;
@@ -138,10 +131,9 @@ begin
   SerialValid := ValidateLicenseKey(InputKey);
   if not SerialValid then
   begin
-    MsgBox('Invalid license key. Please check your key and try again.' + #13#13 +
-           'If you have not yet purchased a license, please contact the developer.' + #13 +
-           'Douyin/TikTok: 23230218947' + #13 +
-           'GitHub: https://github.com/ailiwood',
+    MsgBox('许可证密钥无效，请检查后重试。' + #13#13 +
+           '如尚未购买，请联系开发者获取：' + #13 +
+           '抖音号：23230218947',
            mbError, MB_OK);
     Result := False;
   end
@@ -160,7 +152,7 @@ procedure InitializeWizard;
 var
   DisclaimerText: String;
 begin
-  WizardForm.Caption := 'QuantSage v{#AppVersion} — Purchase License';
+  WizardForm.Caption := 'QuantSage v{#AppVersion} — 购买许可证';
 
   // Extract Alipay QR code to temp folder for display
   ExtractTemporaryFile('pay_qr.bmp');
@@ -168,35 +160,35 @@ begin
   // ── Custom Page: License Purchase ──
   DisclaimerText :=
     '========================================================' + #13#10 +
-    '  QUANTSAGE — License Agreement & Risk Disclaimer' + #13#10 +
+    '  QuantSage — 软件许可协议与风险告知' + #13#10 +
     '========================================================' + #13#10 + #13#10 +
-    '1. PURPOSE: QuantSage is a stock RESEARCH tool. It produces' + #13#10 +
-    '   analysis reports, NOT trading orders. No brokerage integration.' + #13#10 + #13#10 +
-    '2. RISK WARNING: For RESEARCH REFERENCE ONLY. Does NOT constitute' + #13#10 +
-    '   investment advice. All investment decisions at YOUR OWN RISK.' + #13#10 + #13#10 +
-    '3. LICENSE: {#LicensePrice} one-time purchase, lifetime use.' + #13#10 +
-    '   Unauthorized distribution or cracking is prohibited.' + #13#10 + #13#10 +
-    'By proceeding, you accept ALL terms above.';
+    '1. 软件用途：QuantSage 是股票研究辅助工具，产出研究报告，' + #13#10 +
+    '   不集成任何实盘下单功能，不连接任何券商。' + #13#10 + #13#10 +
+    '2. 风险警告：本软件仅供参考研究，不构成任何投资建议。' + #13#10 +
+    '   所有投资决策请自行判断，盈亏自负。' + #13#10 + #13#10 +
+    '3. 许可证：{#LicensePrice} 一次性买断，终身使用。' + #13#10 +
+    '   禁止未经授权的分发或破解。' + #13#10 + #13#10 +
+    '继续安装即表示您接受以上全部条款。';
 
   LicensePage := CreateInputQueryPage(wpWelcome,
-    'Purchase License — {#LicensePrice}',
+    '购买许可证 — {#LicensePrice}',
     DisclaimerText,
-    'HOW TO ACTIVATE: 1. Scan Alipay QR code -> 2. Pay {#LicensePrice} -> ' +
-    '3. Contact dev (Douyin: @23230218947 / GitHub: @ailiwood) for license key -> ' +
-    '4. Enter key below to unlock installation.');
+    '激活步骤：1. 用手机扫描下方支付宝收款码 → 2. 支付 {#LicensePrice} → ' +
+    '3. 联系开发者获取 License Key（抖音：23230218947）→ ' +
+    '4. 在下方输入 Key 解锁安装');
 
   // Display Alipay QR code image on the page
   QrImage := TBitmapImage.Create(WizardForm);
   QrImage.Parent := LicensePage.Surface;
-  QrImage.Left := ScaleX(16);
-  QrImage.Top := ScaleY(16);
-  QrImage.Width := ScaleX(200);
-  QrImage.Height := ScaleY(200);
+  QrImage.Left := ScaleX(40);
+  QrImage.Top := ScaleY(0);
+  QrImage.Width := ScaleX(280);
+  QrImage.Height := ScaleY(280);
   QrImage.Stretch := True;
   QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
 
   // Push the input field down below the QR image
-  LicensePage.Add('License Key (format: QS-XXXX-XXXX-XXXX-XXXX):', False);
+  LicensePage.Add('许可证密钥 (格式: QS-XXXX-XXXX-XXXX-XXXX):', False);
   LicensePage.Values[0] := '';
   LicensePage.OnNextButtonClick := @OnLicensePageNext;
   LicensePage.OnShouldSkipPage := @OnSerialPageShouldSkip;
@@ -206,16 +198,14 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = LicensePage.ID then
   begin
-    WizardForm.NextButton.Caption := '&Validate && Continue';
+    WizardForm.NextButton.Caption := '验证并继续(&V)';
   end;
 
   if CurPageID = wpFinished then
   begin
-    WizardForm.FinishedHeadingLabel.Caption := 'Installation Complete!';
+    WizardForm.FinishedHeadingLabel.Caption := '安装完成！';
     WizardForm.FinishedLabel.Caption :=
-      'QuantSage has been successfully installed and activated.' + #13#13 +
-      'IMPORTANT DISCLAIMER: This software is for research reference only, ' +
-      'does NOT constitute any investment advice. Use at your own risk. ' +
-      'All profits and losses are solely your responsibility.';
+      'QuantSage 已成功安装并激活。' + #13#13 +
+      '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。';
   end;
 end;
