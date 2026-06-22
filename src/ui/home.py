@@ -637,4 +637,26 @@ def show_home() -> None:
     # Footer disclaimer
     from src.compliance.disclaimer import get_ui_footer
     st.markdown(f'<div class="disclaimer-footer">{get_ui_footer()}</div>', unsafe_allow_html=True)
+
+    # ── Live Log Monitor ──
+    with st.expander("实时日志监控", expanded=False):
+        st.caption("应用运行日志（文件: ~/.quantsage/logs/）。分析进行中时点击刷新查看进度。")
+
+        col_r1, col_r2 = st.columns([1, 4])
+        with col_r1:
+            lines = st.selectbox("显示行数", [30, 50, 100, 200], index=1, key="log_lines")
+            if st.button("刷新日志", key="refresh_log"):
+                st.rerun()
+
+        log_file = Path.home() / ".quantsage" / "logs" / f"quantsage_{datetime.now().strftime('%Y-%m-%d')}.log"
+        if log_file.exists():
+            try:
+                content = log_file.read_text(encoding="utf-8")
+                tail_lines = content.strip().splitlines()[-lines:]
+                st.code("\n".join(tail_lines), language="text", line_numbers=False)
+            except Exception:
+                st.caption("(无法读取日志文件)")
+        else:
+            st.caption("(日志文件尚未生成)")
+
     st.markdown("</div>", unsafe_allow_html=True)
