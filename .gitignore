@@ -54,3 +54,4 @@ tmp/
 .claude/
 CC_INIT_PROMPT.md
 quantsage-cc-config.zip
+src/plugins/kronos_service/kronos_model/hf_cache/

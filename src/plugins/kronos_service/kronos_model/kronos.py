@@ -470,11 +470,13 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
 
 def calc_time_stamps(x_timestamp):
     time_df = pd.DataFrame()
-    time_df['minute'] = x_timestamp.dt.minute
-    time_df['hour'] = x_timestamp.dt.hour
-    time_df['weekday'] = x_timestamp.dt.weekday
-    time_df['day'] = x_timestamp.dt.day
-    time_df['month'] = x_timestamp.dt.month
+    # Handle both Series (has .dt) and DatetimeIndex (no .dt)
+    ts = x_timestamp if isinstance(x_timestamp, pd.Series) else x_timestamp.to_series()
+    time_df['minute'] = ts.dt.minute
+    time_df['hour'] = ts.dt.hour
+    time_df['weekday'] = ts.dt.weekday
+    time_df['day'] = ts.dt.day
+    time_df['month'] = ts.dt.month
     return time_df
 
 

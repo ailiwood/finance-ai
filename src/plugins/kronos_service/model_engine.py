@@ -272,8 +272,16 @@ class KronosEngine(BaseEngine):
             from .gpu_detector import pick_device
             self._device = pick_device()
 
+            # Redirect HF cache to bundled weights when running frozen (PyInstaller)
+            import os as _os, sys as _sys
+            if getattr(_sys, "frozen", False):
+                _bundled = _sys._MEIPASS if hasattr(_sys, "_MEIPASS") else ""
+                _cache_path = __import__("pathlib").Path(_bundled) / "src" / "plugins" / "kronos_service" / "kronos_model" / "hf_cache"
+                if _cache_path.exists():
+                    _os.environ["HF_HOME"] = str(_cache_path)
+                    _os.environ.setdefault("HF_HUB_OFFLINE", "1")  # Don't try network
+
             # Allow user to set HF mirror for China mainland
-            import os as _os
             _hf_endpoint = _os.environ.get("HF_ENDPOINT", "")
             if _hf_endpoint:
                 _os.environ.setdefault("HF_ENDPOINT", _hf_endpoint)

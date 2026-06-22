@@ -47,6 +47,9 @@ _own_datas = [
     # Bundle Kronos model code (MIT) — vendored deep learning K-line predictor
     (os.path.join(spec_dir, "src", "plugins", "kronos_service", "kronos_model"),
      os.path.join("src", "plugins", "kronos_service", "kronos_model")),
+    # Bundle Kronos model weights (~400MB) — pre-downloaded from HuggingFace
+    (os.path.join(spec_dir, "src", "plugins", "kronos_service", "kronos_model", "hf_cache"),
+     os.path.join("src", "plugins", "kronos_service", "kronos_model", "hf_cache")),
 ]
 
 # ── Hidden imports ──
