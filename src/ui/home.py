@@ -102,12 +102,14 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config = DEFAULT_CONFIG.copy()
         ta_config["llm_provider"] = "deepseek"
         ta_config["backend_url"] = "https://api.deepseek.com"
-        ta_config["deep_think_llm"] = "deepseek-chat"
+        # Use DeepSeek V4 Flash (384K max output) — legacy deepseek-chat maps here but has 8K limit on some API keys
+        ta_config["deep_think_llm"] = "deepseek-chat"       # maps to v4-flash, 384K max output
         ta_config["quick_think_llm"] = "deepseek-chat"
         ta_config["max_debate_rounds"] = max(1, min(3, depth // 2))
-        # Ensure LLM has enough output tokens for complete reports
-        ta_config["deep_model_config"] = {"max_tokens": 8000, "temperature": 0.3, "timeout": 300}
-        ta_config["quick_model_config"] = {"max_tokens": 8000, "temperature": 0.7, "timeout": 180}
+        # max_tokens=16384: DeepSeek V4 flash supports up to 384K output; 16K is safe headroom
+        # for depth=5 full reports (TA-CN defaults to 4000 which truncates long analysis)
+        ta_config["deep_model_config"] = {"max_tokens": 16384, "temperature": 0.3, "timeout": 300}
+        ta_config["quick_model_config"] = {"max_tokens": 16384, "temperature": 0.7, "timeout": 180}
         ta_config["online_tools"] = False
         ta_config["online_news"] = False
         ta_config["realtime_data"] = False
