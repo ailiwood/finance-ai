@@ -196,32 +196,30 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
 
 
 def _show_history_page() -> None:
-    """Display the report history browser."""
-    from src.report.history import load_history, load_report
+    """Display the report history — file paths only, not full content."""
+    from src.report.history import load_history
     st.markdown("## 历史分析报告")
-    st.caption("每次分析完成后自动存档。点击可查看详情。")
+    st.caption("每次分析完成后自动存档为 .txt 文件。点击路径可在文件管理器中打开。")
 
     history = load_history()
     if not history:
-        st.info("暂无历史报告。完成一次股票分析后，报告将自动保存于此。")
+        st.info("暂无历史报告。完成一次股票分析后，报告将自动保存。")
         if st.button("返回首页", key="back_home_history_empty"):
             st.session_state.show_history = False
             st.rerun()
         return
 
-    for i, entry in enumerate(history[:30]):
-        with st.expander(
-            f"{entry.get('analyzed_at','?')} | {entry.get('symbol','?')} {entry.get('stock_name','?')} "
-            f"| {entry.get('action','?')} | 置信度:{entry.get('confidence',0):.0%}",
-            expanded=(i == 0)
-        ):
-            data = load_report(entry.get("file", ""))
-            if data:
-                st.markdown(data.get("report", "")[:3000])
-                if len(data.get("report", "")) > 3000:
-                    st.caption("... (报告较长，仅显示前3000字)")
-            else:
-                st.caption("(报告文件已丢失)")
+    st.markdown(f"共 **{len(history)}** 条记录（最多显示 30 条）：")
+    for entry in history[:30]:
+        fp = entry.get("file", "")
+        fn = fp.split("\\")[-1].split("/")[-1] if fp else "未知文件"
+        st.markdown(
+            f"**{entry.get('analyzed_at','?')}** | {entry.get('symbol','?')} "
+            f"{entry.get('stock_name','?')} | {entry.get('action','?')} | "
+            f"置信度:{entry.get('confidence',0):.0%}"
+        )
+        st.caption(f"文件: `{fp}`")
+        st.markdown("---")
 
     if st.button("返回首页", key="back_home_history"):
         st.session_state.show_history = False
@@ -565,6 +563,35 @@ def show_home() -> None:
             parts.append(_card("🛡️ 风险管控与最终决策", _ICON_RISK,
                 reports.get("final_trade_decision") or reports.get("judge_decision", "")))
             parts.append("")
+
+        # ── Kronos K-line Prediction ──
+        try:
+            from src.plugins.kronos_service.model_engine import get_engine
+            from src.data.market_data import get_kline as _kline_kronos
+            _kdf = _kline_kronos(result["symbol"], lookback_days=500)
+            if _kdf is not None and len(_kdf) >= 30:
+                _engine = get_engine()
+                _ohlcv = []
+                for _, _r in _kdf.tail(120).iterrows():
+                    _ohlcv.append({
+                        "date": str(_r["date"]),
+                        "open": float(_r["open"]), "high": float(_r["high"]),
+                        "low": float(_r["low"]), "close": float(_r["close"]),
+                        "volume": int(_r.get("volume", 0)),
+                    })
+                _pred = _engine.predict(_ohlcv, horizon_days=10)
+                parts.append("---")
+                parts.append("## Kronos 深度学习 K 线预测")
+                parts.append(f"**预测引擎**: {_pred['method']}")
+                parts.append(f"**当前价格**: ¥{_pred['current_price']:,.2f}")
+                parts.append(f"**预测方向**: {'看涨 📈' if _pred['direction']=='up' else '看跌 📉' if _pred['direction']=='down' else '中性'}")
+                parts.append(f"**目标价格 (10日)**: ¥{_pred['target_price']:,.2f}")
+                parts.append(f"**预测区间**: ¥{_pred['lower_bound']:,.2f} ~ ¥{_pred['upper_bound']:,.2f}")
+                parts.append(f"**置信度**: {_pred['confidence']:.0%}")
+                parts.append(f"*{_pred['disclaimer']}*")
+                parts.append("")
+        except Exception:
+            pass
 
         # Conclusion
         parts.append("---")

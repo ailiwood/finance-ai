@@ -6,7 +6,7 @@ import os
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 spec_dir = SPECPATH  # noqa: F821
-ta_cn_dir = os.path.join(os.path.dirname(spec_dir), 'TradingAgents-CN')
+ta_cn_dir = os.path.join(spec_dir, 'TradingAgents-CN')
 
 app_name = "QuantSage"
 exe_name = "QuantSage_v1.0.0"
