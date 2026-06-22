@@ -219,7 +219,6 @@ p, li, span, div { color: #d1d5db; font-family: 'Segoe UI', 'Microsoft YaHei', s
 _COPYRIGHT_HTML = """
 <div class="quantsage-copyright">
 本软件由 <strong>ailiwood</strong> 开发 |
-<a href="https://github.com/ailiwood" target="_blank">GitHub</a> |
 抖音号: 23230218947
 </div>
 """

@@ -836,7 +836,7 @@ def show_home() -> None:
             st.markdown("""
 | 资源 | 说明 | 难度 | 语言 |
 |------|------|------|------|
-| [QuantSage 开源项目](https://github.com/ailiwood/finance-ai) | 本项目代码仓库。基于 TradingAgents-CN 的本地股票分析工具 | 🔴高级 | 中 |
+| [Python 金融编程入门 (pandas官方)](https://pandas.pydata.org/docs/getting_started/intro_tutorials/09_timeseries.html) | Python数据处理库的金融时序分析官方教程 | 🟡进阶 | 英 |
 | [pandas 时间序列教程](https://pandas.pydata.org/docs/getting_started/intro_tutorials/09_timeseries.html) | Python数据处理库的金融时序分析基础 | 🟡进阶 | 英 |
 """)
 

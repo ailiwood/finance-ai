@@ -40,8 +40,7 @@ def _plugin_dir() -> Path:
 # === Manifest ===
 
 MANIFEST_URLS = [
-    "https://raw.githubusercontent.com/ailiwood/finance-ai/main/plugin_manifest.json",
-    "https://gitee.com/ailiwood/finance-ai/raw/main/plugin_manifest.json",
+    # Plugin manifest URLs — update when distribution server is ready
 ]
 
 LOCAL_MANIFEST_PATH = _plugin_dir() / "plugin_manifest.json"
