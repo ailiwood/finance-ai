@@ -119,18 +119,23 @@ quantsage/
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
 
 ### M7 进度
-- [x] 核心打包(onedir + TA-CN捆绑 + 133 tests)
+- [x] 核心打包(onedir + TA-CN捆绑 + 143 tests)
 - [x] 多LLM供应商(14家) + LLM合规审查闸
 - [x] UI深色科技风 + 版权 + 免责声明
-- [x] 数据可靠性: 全qfq + 多源回退(Tushare→AkShare) + 数据体检页
+- [x] 数据可靠性: 全qfq + 多源回退(BaoStock→AKShare→Tushare→AKShare EM) + 数据体检页
 - [x] P0红线: 数据验证闸(无数据→终止,禁止LLM编造)
 - [x] 多周期技术指标(MA/MACD/RSI/KDJ/BOLL, 6周期)
 - [x] 情绪数据源配置(AkShare/Finnhub/Custom)
 - [x] Kronos CPU适配(pick_device cuda→mps→cpu)
-- [x] 133 tests passed
+- [x] 143 tests passed
 - [x] 去除 Fernet 加密层 → 明文 .env 存储（2026-06-22）
 - [x] 配置持久化至 ~/.quantsage/.env（跨 PyInstaller 重启不丢失）
+- [x] get_kline 返回契约统一: DataFrame + df.attrs（方案A）
+- [x] format_market_data_for_llm(df) 独立函数 + 10 单测
+- [x] 情绪面禁编造红线: social_media/news analyst 提示词修复
+- [x] 接通免费情绪源: AKShare stock_news_em（东方财富个股新闻）
 - [ ] exe打包验证(用户侧)
+- [ ] Inno Setup 安装器重新构建
 
 ### M7 架构要点
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包

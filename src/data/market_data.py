@@ -27,8 +27,12 @@ _adjust_used: str = ""
 
 
 def _log(msg: str) -> None:
-    print(f"[数据] {msg}", flush=True)
-    print(f"[数据] {msg}", file=sys.stderr, flush=True)
+    # Use ASCII-safe replacement to avoid GBK/UnicodeEncodeError on Windows terminals
+    safe = msg.encode("ascii", errors="replace").decode("ascii")
+    try:
+        print(f"[data] {safe}", flush=True)
+    except Exception:
+        pass
 
 
 def get_last_source() -> str:
@@ -93,7 +97,7 @@ def _fetch_baostock(symbol: str, start: str, end: str) -> Optional[pd.DataFrame]
         if len(df) >= 3:
             global _source_used, _adjust_used
             _source_used, _adjust_used = "BaoStock", "前复权(qfq)"
-            _log(f"BaoStock ✅: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
+            _log(f"BaoStock [OK]: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
             return df
         _log(f"BaoStock: 有效数据不足({len(df)}行)")
         return None
@@ -148,7 +152,7 @@ def _fetch_akshare_sina(symbol: str, start: str, end: str) -> Optional[pd.DataFr
         if len(df) >= 3:
             global _source_used, _adjust_used
             _source_used, _adjust_used = "AKShare(Sina)", "前复权(qfq)"
-            _log(f"AkShare(Sina) ✅: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
+            _log(f"AkShare(Sina) [OK]: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
             return df
         return None
     except Exception as e:
@@ -200,7 +204,7 @@ def _fetch_tushare(symbol: str, start: str, end: str) -> Optional[pd.DataFrame]:
         if len(df) >= 3:
             global _source_used, _adjust_used
             _source_used, _adjust_used = "Tushare", "不复权"
-            _log(f"Tushare ✅: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
+            _log(f"Tushare [OK]: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
             return df
         return None
     except Exception as e:
@@ -237,7 +241,7 @@ def _fetch_akshare_em(symbol: str, start: str, end: str, adjust: str) -> Optiona
         if len(df) >= 3:
             global _source_used, _adjust_used
             _source_used, _adjust_used = "AKShare(东财)", "前复权(qfq)"
-            _log(f"AkShare(EM) ✅: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
+            _log(f"AkShare(EM) [OK]: {len(df)}行, {df['close'].iloc[0]:.2f}~{df['close'].iloc[-1]:.2f}")
             return df
         return None
     except Exception as e:
@@ -297,6 +301,11 @@ def get_kline(
             if include_today_intraday is False and len(df) > 0:
                 today = pd.Timestamp.now().normalize()
                 df = df[df["date"] < today].copy()
+            # Attach metadata so downstream can display source/adjust info
+            df.attrs["source"] = _source_used or "unknown"
+            df.attrs["adjust"] = _adjust_used or "qfq"
+            # Remove legacy global state to prevent stale reads
+            _source_used, _adjust_used = "", ""
             return df
 
     raise RuntimeError(
@@ -307,6 +316,84 @@ def get_kline(
 
 def calc_ma(df: pd.DataFrame, window: int, column: str = "close") -> pd.Series:
     return df[column].rolling(window=window, min_periods=1).mean()
+
+
+def format_market_data_for_llm(df: pd.DataFrame, symbol: str = "", max_rows: int = 50) -> str:
+    """Format a kline DataFrame into structured text for LLM consumption.
+
+    Produces a markdown table with recent OHLCV + MA5/MA10/MA20 values.
+    Never fabricates — all numbers come directly from the DataFrame.
+
+    Args:
+        df: DataFrame from get_kline() with columns (date, open, high, low, close, volume)
+        symbol: Stock code for the header
+        max_rows: Max recent rows to include
+
+    Returns:
+        Markdown-formatted string suitable for LLM context.
+    """
+    if df is None or df.empty:
+        return "⚠️ 无可用K线数据"
+
+    source = str(df.attrs.get("source", "未知"))
+    adjust = str(df.attrs.get("adjust", "前复权"))
+
+    # Work on a copy limited to recent rows
+    work = df.tail(max_rows).copy()
+    work["date"] = work["date"].dt.strftime("%Y-%m-%d")
+    for col in ("open", "high", "low", "close"):
+        if col in work.columns:
+            work[col] = work[col].round(2)
+
+    # Calculate MAs
+    latest = df.iloc[-1]
+    ma5 = round(float(calc_ma(df, 5).iloc[-1]), 2) if len(df) >= 5 else None
+    ma10 = round(float(calc_ma(df, 10).iloc[-1]), 2) if len(df) >= 10 else None
+    ma20 = round(float(calc_ma(df, 20).iloc[-1]), 2) if len(df) >= 20 else None
+    ma60 = round(float(calc_ma(df, 60).iloc[-1]), 2) if len(df) >= 60 else None
+
+    header = f"# {symbol or '股票'} 市场数据\n"
+    header += f"数据来源: {source} | 复权: {adjust} | 总行数: {len(df)}\n\n"
+
+    summary = "## 最新收盘\n"
+    summary += f"- 日期: {latest['date'].strftime('%Y-%m-%d')}\n"
+    summary += f"- 开盘: {latest['open']:.2f} | 最高: {latest['high']:.2f} | 最低: {latest['low']:.2f} | 收盘: {latest['close']:.2f}\n"
+    summary += f"- 成交量: {int(latest['volume']):,}\n"
+    mas = []
+    if ma5 is not None:
+        mas.append(f"MA5={ma5}")
+    if ma10 is not None:
+        mas.append(f"MA10={ma10}")
+    if ma20 is not None:
+        mas.append(f"MA20={ma20}")
+    if ma60 is not None:
+        mas.append(f"MA60={ma60}")
+    if mas:
+        summary += f"- 均线: {' | '.join(mas)}\n"
+
+    # Recent data table
+    table = f"\n## 最近{len(work)}个交易日 OHLCV\n"
+    table += "| 日期 | 开盘 | 最高 | 最低 | 收盘 | 成交量 |\n"
+    table += "|------|------|------|------|------|--------|\n"
+    for _, row in work.iterrows():
+        table += (
+            f"| {row['date']} "
+            f"| {row['open']:.2f} "
+            f"| {row['high']:.2f} "
+            f"| {row['low']:.2f} "
+            f"| {row['close']:.2f} "
+            f"| {int(row['volume']):,} |\n"
+        )
+
+    result = header + summary + table
+    result += "\n---\n*数据由 QuantSage 自动获取，仅供参考研究，不构成投资建议*\n"
+
+    # DEBUG: log first 500 chars
+    _log(f"format_market_data_for_llm: {len(result)} chars total")
+    preview = result[:500].replace("\n", "\\n")
+    _log(f"LLM 数据前500字: {preview}")
+
+    return result
 
 
 def clear_cache():
