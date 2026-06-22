@@ -46,7 +46,7 @@ class TushareProvider(BaseStockDataProvider):
         """
         try:
             self.logger.info("🔍 [DB查询] 开始从数据库读取 Token...")
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
             config_collection = db.system_configs
 

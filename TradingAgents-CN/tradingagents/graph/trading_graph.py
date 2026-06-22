@@ -532,7 +532,7 @@ class TradingAgentsGraph:
         self.toolkit = Toolkit(config=self.config)
 
         # Initialize memories (如果启用)
-        memory_enabled = self.config.get("memory_enabled", True)
+        memory_enabled = self.config.get("memory_enabled", False)  # Default off: DeepSeek lacks /v1/embeddings
         if memory_enabled:
             # 使用单例ChromaDB管理器，避免并发创建冲突
             self.bull_memory = FinancialSituationMemory("bull_memory", self.config)

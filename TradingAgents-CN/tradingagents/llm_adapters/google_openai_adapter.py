@@ -55,7 +55,7 @@ class ChatGoogleOpenAI(ChatGoogleGenerativeAI):
         if not google_api_key:
             # 导入 API Key 验证工具
             try:
-                from app.utils.api_key_utils import is_valid_api_key
+                def is_valid_api_key(key): return bool(key and len(str(key).strip()) > 8 and not str(key).startswith("your_"))
             except ImportError:
                 def is_valid_api_key(key):
                     if not key or len(key) <= 10:

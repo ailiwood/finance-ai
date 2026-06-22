@@ -18,14 +18,23 @@ LOG_DIR = Path.home() / ".quantsage" / "logs"
 _MAX_LOG_FILES = 30  # Keep last 30 daily logs
 
 
+_LOGGING_INITIALIZED = False
+
+
 def setup_logging(level: int = logging.INFO, to_console: bool = True) -> logging.Logger:
     """Configure root logger with file + console handlers.
 
     File handler: daily rotating log in ~/.quantsage/logs/
     Console handler: stderr (UTF-8 safe wrapper on Windows)
 
+    Idempotent: skips re-initialization if already configured (avoids log spam on Streamlit reruns).
+
     Returns the root logger configured for the application.
     """
+    global _LOGGING_INITIALIZED
+    if _LOGGING_INITIALIZED:
+        return logging.getLogger("quantsage")
+
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     # Clean up old logs
@@ -72,6 +81,8 @@ def setup_logging(level: int = logging.INFO, to_console: bool = True) -> logging
     logger.info("QuantSage started — log file: %s", log_file)
     logger.info("=" * 50)
 
+    global _LOGGING_INITIALIZED
+    _LOGGING_INITIALIZED = True
     return logger
 
 

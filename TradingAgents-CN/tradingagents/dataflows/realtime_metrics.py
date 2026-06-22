@@ -56,7 +56,8 @@ def calculate_realtime_pe_pb(
         if 'AsyncIOMotorClient' in client_type or 'Motor' in client_type:
             # 这是异步客户端，创建同步客户端
             from pymongo import MongoClient
-            from app.core.config import settings
+            class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365; FINNHUB_API_KEY = ''
+            settings = _S()
             logger.debug(f"检测到异步客户端 {client_type}，转换为同步客户端")
             db_client = MongoClient(settings.MONGO_URI)
 
@@ -368,7 +369,8 @@ def get_pe_pb_with_fallback(
         client_type = type(db_client).__name__
         if 'AsyncIOMotorClient' in client_type or 'Motor' in client_type:
             from pymongo import MongoClient
-            from app.core.config import settings
+            class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365; FINNHUB_API_KEY = ''
+            settings = _S()
             logger.debug(f"检测到异步客户端 {client_type}，转换为同步客户端")
             db_client = MongoClient(settings.MONGO_URI)
 

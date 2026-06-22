@@ -103,7 +103,7 @@ class DataSourceManager:
 
         try:
             # 🔥 从数据库读取数据源配置（使用同步客户端）
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
             config_collection = db.system_configs
 
@@ -415,7 +415,7 @@ class DataSourceManager:
         # 🔥 从数据库读取数据源配置，获取启用状态
         enabled_sources_in_db = set()
         try:
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
             config_collection = db.system_configs
 
@@ -509,7 +509,7 @@ class DataSourceManager:
     def _get_datasource_configs_from_db(self) -> dict:
         """从数据库读取数据源配置（包括 API Key）"""
         try:
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
 
             # 从 system_configs 集合读取激活的配置
@@ -2313,7 +2313,7 @@ class USDataSourceManager:
         """
         try:
             # 从数据库读取数据源配置
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
 
             # 方法1: 从 datasource_groupings 集合读取（推荐）
@@ -2443,7 +2443,7 @@ class USDataSourceManager:
     def _get_enabled_sources_from_db(self) -> List[str]:
         """从数据库读取启用的数据源列表"""
         try:
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
 
             # 从 datasource_groupings 集合读取
@@ -2476,7 +2476,7 @@ class USDataSourceManager:
     def _get_datasource_configs_from_db(self) -> dict:
         """从数据库读取数据源配置（包括 API Key）"""
         try:
-            from app.core.database import get_mongo_db_sync
+            raise ImportError("MongoDB disabled — standalone mode")
             db = get_mongo_db_sync()
 
             # 从 system_configs 集合读取激活的配置

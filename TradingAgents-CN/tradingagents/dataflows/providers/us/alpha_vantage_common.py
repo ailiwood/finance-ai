@@ -44,7 +44,7 @@ def _get_api_key_from_database() -> Optional[str]:
     """
     try:
         logger.debug("🔍 [DB查询] 开始从数据库读取 Alpha Vantage API Key...")
-        from app.core.database import get_mongo_db_sync
+        raise ImportError("MongoDB disabled — standalone mode")
         db = get_mongo_db_sync()
         config_collection = db.system_configs
 

@@ -824,11 +824,11 @@ class OptimizedChinaDataProvider:
     def _estimate_financial_metrics(self, symbol: str, current_price: str) -> dict:
         """获取真实财务指标（从 MongoDB、AKShare、Tushare 获取，失败则抛出异常）"""
 
-        # 提取价格数值
+        # 提取价格数值 — NEVER fabricate (QuantSage anti-fabrication red line)
         try:
             price_value = float(current_price.replace('¥', '').replace(',', ''))
-        except:
-            price_value = 10.0  # 默认值
+        except Exception:
+            price_value = None  # No fake price! Will report unavailable
 
         # 尝试获取真实财务数据
         real_metrics = self._get_real_financial_metrics(symbol, price_value)

@@ -328,7 +328,8 @@ class StockDataPreparer:
         end_date = datetime.strptime(analysis_date, '%Y-%m-%d')
 
         # 获取配置的回溯天数（与get_china_stock_data_unified保持一致）
-        from app.core.config import settings
+        class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365; FINNHUB_API_KEY = ''
+        settings = _S()
         lookback_days = getattr(settings, 'MARKET_ANALYST_LOOKBACK_DAYS', 365)
 
         # 使用扩展后的日期范围进行数据检查和同步
@@ -488,7 +489,8 @@ class StockDataPreparer:
 
         # 计算日期范围
         end_date = datetime.strptime(analysis_date, '%Y-%m-%d')
-        from app.core.config import settings
+        class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365; FINNHUB_API_KEY = ''
+        settings = _S()
         lookback_days = getattr(settings, 'MARKET_ANALYST_LOOKBACK_DAYS', 365)
         extended_start_date = end_date - timedelta(days=lookback_days)
         extended_start_date_str = extended_start_date.strftime('%Y-%m-%d')
@@ -787,10 +789,10 @@ class StockDataPreparer:
 
                     # 根据数据源获取对应的同步服务
                     if data_source == "tushare":
-                        from app.worker.tushare_sync_service import get_tushare_sync_service
+                        def get_tushare_sync_service(): return None
                         service = await get_tushare_sync_service()
                     elif data_source == "akshare":
-                        from app.worker.akshare_sync_service import get_akshare_sync_service
+                        def get_akshare_sync_service(): return None
                         service = await get_akshare_sync_service()
                     else:
                         logger.warning(f"⚠️ [数据同步] 不支持的数据源: {data_source}")
@@ -840,7 +842,7 @@ class StockDataPreparer:
                         # 对于单个股票，AKShare更适合获取实时行情
                         if data_source == "tushare":
                             # Tushare的实时行情接口有限制，改用AKShare
-                            from app.worker.akshare_sync_service import get_akshare_sync_service
+                            def get_akshare_sync_service(): return None
                             realtime_service = await get_akshare_sync_service()
                         else:
                             realtime_service = service

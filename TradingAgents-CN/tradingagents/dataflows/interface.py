@@ -61,7 +61,10 @@ def _get_enabled_hk_data_sources() -> list:
     """
     try:
         # 尝试从数据库读取配置
-        from app.core.database import get_mongo_db_sync
+        try:
+            from app.core.database import get_mongo_db_sync
+        except ImportError:
+            get_mongo_db_sync = lambda: None
         db = get_mongo_db_sync()
 
         # 获取最新的激活配置
@@ -121,7 +124,10 @@ def _get_enabled_us_data_sources() -> list:
     """
     try:
         # 尝试从数据库读取配置
-        from app.core.database import get_mongo_db_sync
+        try:
+            from app.core.database import get_mongo_db_sync
+        except ImportError:
+            get_mongo_db_sync = lambda: None
         db = get_mongo_db_sync()
 
         # 获取最新的激活配置
@@ -1530,8 +1536,10 @@ def get_china_stock_data_unified(
     """
     # 🔧 智能日期范围处理：自动扩展到配置的回溯天数，处理周末/节假日
     from tradingagents.utils.dataflow_utils import get_trading_date_range
-    from app.core.config import get_settings
-
+    def _get_settings_standalone():
+        class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365
+        return _S()
+    get_settings = lambda: _get_settings_standalone()
     original_start_date = start_date
     original_end_date = end_date
 
@@ -1762,8 +1770,10 @@ def get_hk_stock_data_unified(symbol: str, start_date: str = None, end_date: str
 
         # 🔧 智能日期范围处理：自动扩展到配置的回溯天数，处理周末/节假日
         from tradingagents.utils.dataflow_utils import get_trading_date_range
-        from app.core.config import get_settings
-
+        def _get_settings_standalone():
+            class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365
+            return _S()
+        get_settings = lambda: _get_settings_standalone()
         original_start_date = start_date
         original_end_date = end_date
 

@@ -535,7 +535,10 @@ def get_us_stock_data_cached(symbol: str, start_date: str, end_date: str,
     """
     # 🔧 智能日期范围处理：自动扩展到配置的回溯天数，处理周末/节假日
     from tradingagents.utils.dataflow_utils import get_trading_date_range
-    from app.core.config import get_settings
+    _gscfg = __import__("tradingagents.default_config", fromlist=["DEFAULT_CONFIG"]).DEFAULT_CONFIG
+def get_settings():
+    class _S: MARKET_ANALYST_LOOKBACK_DAYS = 365
+    return _S()
     from datetime import datetime
 
     original_start_date = start_date
