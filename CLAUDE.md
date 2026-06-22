@@ -118,38 +118,52 @@ quantsage/
 **阶段一完成！** 仓库: https://github.com/ailiwood/finance-ai
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
 
-### M7 进度
+### M7 进度（2026-06-23 更新）
+
 - [x] 核心打包(onedir + TA-CN捆绑 + 143 tests)
 - [x] 多LLM供应商(14家) + LLM合规审查闸
 - [x] UI深色科技风 + 版权 + 免责声明
 - [x] 数据可靠性: 全qfq + 多源回退(BaoStock→AKShare→Tushare→AKShare EM) + 数据体检页
 - [x] P0红线: 数据验证闸(无数据→终止,禁止LLM编造)
 - [x] 多周期技术指标(MA/MACD/RSI/KDJ/BOLL, 6周期)
-- [x] 情绪数据源配置(AkShare/Finnhub/Custom)
-- [x] Kronos CPU适配(pick_device cuda→mps→cpu)
+- [x] 情绪/新闻数据源配置(AkShare/Finnhub/Custom)
+- [x] Kronos-base(102.3M,MIT)深度学习模型集成 + CPU/GPU双模式 + 统计降级
 - [x] 143 tests passed
-- [x] 去除 Fernet 加密层 → 明文 .env 存储（2026-06-22）
-- [x] 配置持久化至 ~/.quantsage/.env（跨 PyInstaller 重启不丢失）
-- [x] get_kline 返回契约统一: DataFrame + df.attrs（方案A）
+- [x] 去除 Fernet 加密层 → 明文 .env 存储
+- [x] 配置持久化至 ~/.quantsage/.env
+- [x] get_kline 返回契约统一: DataFrame + df.attrs
 - [x] format_market_data_for_llm(df) 独立函数 + 10 单测
-- [x] 情绪面禁编造红线: social_media/news analyst 提示词修复
-- [x] 接通免费情绪源: AKShare stock_news_em（东方财富个股新闻）
-- [x] 硬件检测 + GPU 可选升级（三层方案: CPU默认→nvidia-smi检测→用户升级）
-- [x] 全量测试 17/17 通过（数据链路+CPU部署+硬件检测）
-- [x] 全链路日志监控模块: trace_id + 双输出 + 数据形态埋点 + 诊断导出（2026-06-22）
-- [ ] exe打包验证(用户侧)
-- [ ] Inno Setup 安装器重新构建
+- [x] 情绪面禁编造红线
+- [x] 免费情绪源: AKShare stock_news_em
+- [x] 硬件检测 + GPU 可选升级（三层方案）
+- [x] 全链路日志监控模块: trace_id + 双输出 + 数据形态埋点 + 诊断导出
+- [x] 数据桥接: 4个TA-CN工具→get_kline()+format() 绕过断裂管线B
+- [x] 安装器付费流程: 功能介绍→协议强制勾选→扫码付款→License Key→安装
+- [x] License Key 离线验证(16位校验和)
+- [x] 简体中文安装器
+- [x] 报告历史存档(~/.quantsage/reports/日期-代码.txt)
+- [x] 金融知识学习中心(4标签页)
+- [x] Kronos预测嵌入报告(引擎名/方向/目标价/区间/置信度)
+- [x] PyInstaller + Inno Setup 完整构建
+- [ ] 无显卡电脑端到端验证
+- [ ] 分析进度实时反馈+取消按钮
 
 ### M7 架构要点
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包
-- **GPU 方案**: 安装包内置 CPU 版 torch（开箱即用）；启动时 nvidia-smi 自动检测；UI 引导用户主动升级 CUDA 版（pip install torch cu124）；失败回退 CPU 版
+- **GPU 方案**: CPU版torch开箱即用；nvidia-smi检测→UI引导升级CUDA版；失败回退CPU版
+- **数据桥接**: agent_utils.py 工具层拦截TA-CN A股请求，用get_kline()+format()返回真实数据
+- **Kronos**: vendored代码+HuggingFace权重(NeoQuasar/Kronos-base)，强制base变体，406MB内置
+- **许可**: 离线16位校验和，Inno Setup Pascal+Python keygen一致
 - **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
-- **TradingAgents-CN**: pip install 后置步骤，不捆绑
+- **打包路径**: spec中ta_cn_dir必须指向 spec_dir/TradingAgents-CN（不是os.path.dirname(spec_dir)）
 
 **已知问题**：
 - fpdf2 为 LGPLv3 许可证，如需完全合规可替换为 reportlab (BSD)
 - PyInstaller 为 GPL 许可证（含 Bootloader Exception），Nuitka (Apache 2.0) 为备选方案
-- API keys 存为 `.env` 明文文件于 `~/.quantsage/.env`，本地安全依赖用户系统防护
+- API keys 存为 `.env` 明文文件于 `~/.quantsage/.env`
+- AKShare stock_news_em pyarrow bug → 绕过用HTTP直连东方财富API
+- DeepSeek 无 /v1/embeddings → ChromaDB记忆默认关闭
+- 基本面PE/PB/ROE需Tushare Token
 
 ---
 
