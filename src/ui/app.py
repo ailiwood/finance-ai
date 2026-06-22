@@ -10,33 +10,37 @@ from __future__ import annotations
 import os as _os, sys as _sys, time as _time
 from pathlib import Path as _Path
 
+# ═══════════════════════════════════════════════════════════════
+# Step 0: Set up sys.path BEFORE any project imports
+# ═══════════════════════════════════════════════════════════════
+# When running `streamlit run src/ui/app.py`, the project root is the cwd.
+# For PyInstaller builds, sys._MEIPASS points to the extraction dir.
+_FROZEN = getattr(_sys, "frozen", False)
+if _FROZEN and hasattr(_sys, "_MEIPASS"):
+    _PROJECT_ROOT = _Path(_sys._MEIPASS)
+else:
+    _PROJECT_ROOT = _Path(__file__).resolve().parent.parent.parent
+
+_TA_CN_DIR = _PROJECT_ROOT / "TradingAgents-CN"
+for _p in (str(_PROJECT_ROOT), str(_TA_CN_DIR)):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 # Execution marker for frozen-mode debugging
 _marker = _Path(_os.environ.get("TEMP", "/tmp")) / "quantsage_app_executed.txt"
 try:
     _marker.write_text(
         f"{_time.strftime('%H:%M:%S')} app.py EXECUTED\n"
-        f"frozen={getattr(_sys, 'frozen', False)}\n"
+        f"frozen={_FROZEN}\n"
         f"python={_sys.executable}\n"
-        f"path={_sys.path[:5]}\n"
+        f"root={_PROJECT_ROOT}\n"
     )
 except Exception:
     pass
 
-import sys
-from pathlib import Path
-
-# ── Logging: file + console, must be first ──
+# ── Logging: file + console ──
 from src.core.logging_config import setup_logging
 _log = setup_logging()
-
-# Ensure project root and TA-CN are on sys.path (for `streamlit run`)
-# Use resource_path for PyInstaller compatibility
-from src.deployment.resource_path import get_base_path
-_PROJECT_ROOT = get_base_path()
-_TA_CN_DIR = _PROJECT_ROOT / "TradingAgents-CN"
-for _p in (str(_PROJECT_ROOT), str(_TA_CN_DIR)):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 import streamlit as st
 
