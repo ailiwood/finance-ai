@@ -407,3 +407,114 @@ def clear_cache():
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Free news fetcher (AKShare → EastMoney stock_news_em)
+# ═══════════════════════════════════════════════════════════════
+
+def fetch_china_news(symbol: str, max_news: int = 10) -> str:
+    """Fetch real A-share news via AKShare (EastMoney stock_news_em). FREE, no API key.
+
+    Returns formatted news text, or empty string on failure.
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_news_em(symbol=symbol)
+        if df is None or df.empty:
+            _log(f"stock_news_em({symbol}) 返回空")
+            return ""
+
+        df = df.head(max_news)
+        lines = [
+            f"## {symbol} 个股新闻 (来源: 东方财富, 免费接口)",
+            f"共获取 {len(df)} 条新闻：\n"
+        ]
+        for _, row in df.iterrows():
+            title = str(row.get("新闻标题", row.get("title", "")))
+            time_str = str(row.get("发布时间", row.get("time", "")))
+            if title and title != "nan":
+                lines.append(f"- [{time_str}] {title}")
+
+        result = "\n".join(lines)
+        _log(f"fetch_china_news({symbol}): {len(df)} 条新闻")
+        return result
+    except ImportError:
+        _log("akshare 未安装 — 新闻功能不可用")
+        return ""
+    except Exception as e:
+        _log(f"fetch_china_news({symbol}) 失败: {e}")
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════════
+# Free fundamentals fetcher (BaoStock query_stock_basic)
+# ═══════════════════════════════════════════════════════════════
+
+def get_fundamentals(symbol: str) -> str:
+    """Fetch A-share fundamental data via BaoStock (free, no registration).
+
+    Returns markdown-formatted string with stock basic info (industry, area, listing date).
+    Financial indicators (PE/PB/ROE) require Tushare for complete data.
+    Never fabricates — missing fields are clearly marked.
+    """
+    try:
+        import baostock as bs
+        lg = bs.login()
+        if lg.error_code != "0":
+            return ""
+
+        bs_code = _baostock_symbol(symbol)
+
+        # 1) Stock basic info
+        rs_basic = bs.query_stock_basic(code=bs_code)
+        basic_info = {}
+        if rs_basic.error_code == "0":
+            while rs_basic.next():
+                row = rs_basic.get_row_data()
+                basic_info["name"] = row[1] if len(row) > 1 else ""
+                basic_info["ipo_date"] = row[2] if len(row) > 2 else ""
+
+        # 2) Industry classification
+        try:
+            rs_ind = bs.query_stock_industry(code=bs_code)
+            industry = ""
+            if rs_ind.error_code == "0":
+                while rs_ind.next():
+                    row = rs_ind.get_row_data()
+                    industry = row[3] if len(row) > 3 else ""
+            basic_info["industry"] = industry
+        except Exception:
+            basic_info["industry"] = ""
+
+        bs.logout()
+
+        if not basic_info.get("name"):
+            return ""
+
+        lines = [
+            f"## {symbol} 基本面信息 (来源: BaoStock, 免费接口)",
+            "",
+            "### 公司基本信息",
+            f"- 股票名称: {basic_info.get('name', '未知')}",
+            f"- 所属行业: {basic_info.get('industry', '未知')}",
+            f"- 上市日期: {basic_info.get('ipo_date', '未知')}",
+            "",
+            "### 财务指标",
+            "| 指标 | 数值 | 说明 |",
+            "|------|------|------|",
+            "| PE (市盈率) | ⚠️ 暂不可用 | 需 Tushare Token (tushare.pro 免费注册) |",
+            "| PB (市净率) | ⚠️ 暂不可用 | 同上 |",
+            "| ROE | ⚠️ 暂不可用 | 同上 |",
+            "| EPS | ⚠️ 暂不可用 | 同上 |",
+            "| 股息率 | ⚠️ 暂不可用 | 同上 |",
+            "",
+            "*BaoStock 免费接口仅提供基本信息。PE/PB/ROE/EPS 等财务指标需配置 Tushare。*",
+            "*本报告不编造任何数据。所有标注'暂不可用'的指标均为真实数据缺失。*",
+        ]
+        return "\n".join(lines)
+    except ImportError:
+        return ""
+    except Exception as e:
+        _log(f"get_fundamentals({symbol}) 失败: {e}")
+        return ""

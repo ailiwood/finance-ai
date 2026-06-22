@@ -858,45 +858,56 @@ class Toolkit:
                 logger.info(f"🔍 [股票代码追踪] 进入A股处理分支，ticker: '{ticker}'")
                 logger.info(f"💡 [优化策略] 基本面分析只获取当前价格和财务数据，不获取历史日线数据")
 
-                # 优化策略：基本面分析不需要大量历史日线数据
-                # 只获取当前股价信息（最近1-2天即可）和基本面财务数据
+                # 桥接：使用QuantSage已验证的数据管线（绕过TA-CN断裂的data_source_manager）
+                logger.info(f"[桥接] A股基本面 -> 使用 get_kline() + BaoStock 财务数据")
+
+                # ── 4a. 获取真实股价（get_kline 最新收盘价）──
                 try:
-                    # 获取最新股价信息（只需要最近1-2天的数据）
-                    from datetime import datetime, timedelta
-                    recent_end_date = curr_date
-                    recent_start_date = (datetime.strptime(curr_date, '%Y-%m-%d') - timedelta(days=2)).strftime('%Y-%m-%d')
-
-                    from tradingagents.dataflows.interface import get_china_stock_data_unified
-                    logger.info(f"🔍 [股票代码追踪] 调用 get_china_stock_data_unified（仅获取最新价格），传入参数: ticker='{ticker}', start_date='{recent_start_date}', end_date='{recent_end_date}'")
-                    current_price_data = get_china_stock_data_unified(ticker, recent_start_date, recent_end_date)
-
-                    # 🔍 调试：打印返回数据的前500字符
-                    logger.info(f"🔍 [基本面工具调试] A股价格数据返回长度: {len(current_price_data)}")
-                    logger.info(f"🔍 [基本面工具调试] A股价格数据前500字符:\n{current_price_data[:500]}")
-
-                    result_data.append(f"## A股当前价格信息\n{current_price_data}")
+                    from src.data.market_data import get_kline
+                    from src.monitor import log_data_shape
+                    df = get_kline(ticker, adjust="qfq", lookback_days=100)
+                    if df is not None and len(df) >= 3:
+                        latest = df.iloc[-1]
+                        log_data_shape("[桥接] get_kline -> fundamentals price", df)
+                        price_info = (
+                            f"## A股当前价格信息（真实数据，来源: {df.attrs.get('source', 'BaoStock')}）\n"
+                            f"- 最新交易日: {latest['date'].strftime('%Y-%m-%d')}\n"
+                            f"- 开盘: ¥{latest['open']:.2f}\n"
+                            f"- 最高: ¥{latest['high']:.2f}\n"
+                            f"- 最低: ¥{latest['low']:.2f}\n"
+                            f"- 收盘: ¥{latest['close']:.2f}\n"
+                            f"- 成交量: {int(latest['volume']):,} 手\n"
+                            f"- 数据行数: {len(df)} 行\n"
+                        )
+                        result_data.append(price_info)
+                        current_price_data = str(latest['close'])
+                    else:
+                        result_data.append("## A股当前价格信息\n❌ 无法获取真实价格数据（数据源返回空）")
+                        current_price_data = ""
                 except Exception as e:
-                    logger.error(f"❌ [基本面工具调试] A股价格数据获取失败: {e}")
-                    result_data.append(f"## A股当前价格信息\n获取失败: {e}")
+                    logger.error(f"[桥接] A股价格获取失败: {e}")
+                    result_data.append(f"## A股当前价格信息\n❌ 获取失败: {str(e)[:200]}")
                     current_price_data = ""
 
+                # ── 4b. 获取基本面财务数据（BaoStock query_stock_basic）──
                 try:
-                    # 获取基本面财务数据（这是基本面分析的核心）
-                    from tradingagents.dataflows.optimized_china_data import OptimizedChinaDataProvider
-                    analyzer = OptimizedChinaDataProvider()
-                    logger.info(f"🔍 [股票代码追踪] 调用 OptimizedChinaDataProvider._generate_fundamentals_report，传入参数: ticker='{ticker}', analysis_modules='{analysis_modules}'")
-
-                    # 传递分析模块参数到基本面分析方法
-                    fundamentals_data = analyzer._generate_fundamentals_report(ticker, current_price_data, analysis_modules)
-
-                    # 🔍 调试：打印返回数据的前500字符
-                    logger.info(f"🔍 [基本面工具调试] A股基本面数据返回长度: {len(fundamentals_data)}")
-                    logger.info(f"🔍 [基本面工具调试] A股基本面数据前500字符:\n{fundamentals_data[:500]}")
-
-                    result_data.append(f"## A股基本面财务数据\n{fundamentals_data}")
+                    from src.data.market_data import get_fundamentals
+                    fund_data = get_fundamentals(ticker)
+                    if fund_data:
+                        result_data.append(fund_data)
+                    else:
+                        result_data.append(
+                            "## A股基本面财务数据\n"
+                            "⚠️ 财务数据暂不可用。已尝试 BaoStock 免费接口。\n"
+                            "如需完整财务数据（PE/PB/ROE/财报），请配置 Tushare Token（tushare.pro 免费注册）。\n"
+                            "*本报告不编造任何财务指标。*"
+                        )
                 except Exception as e:
-                    logger.error(f"❌ [基本面工具调试] A股基本面数据获取失败: {e}")
-                    result_data.append(f"## A股基本面财务数据\n获取失败: {e}")
+                    logger.error(f"[桥接] A股财务数据获取失败: {e}")
+                    result_data.append(
+                        "## A股基本面财务数据\n"
+                        "❌ 财务数据获取失败，不编造任何指标。\n"
+                    )
 
             elif is_hk:
                 # 港股：使用AKShare数据源，支持多重备用方案
@@ -1087,21 +1098,30 @@ class Toolkit:
             result_data = []
 
             if is_china:
-                # 中国A股：使用中国股票数据源
-                logger.info(f"🇨🇳 [统一市场工具] 处理A股市场数据...")
+                # 中国A股：桥接到QuantSage已验证的数据管线（绕过TA-CN断裂的data_source_manager）
+                logger.info(f"[桥接] A股市场数据 -> 使用 get_kline() + format_market_data_for_llm()")
 
                 try:
-                    from tradingagents.dataflows.interface import get_china_stock_data_unified
-                    stock_data = get_china_stock_data_unified(ticker, start_date, end_date)
-
-                    # 🔍 调试：打印返回数据的前500字符
-                    logger.info(f"🔍 [市场工具调试] A股数据返回长度: {len(stock_data)}")
-                    logger.info(f"🔍 [市场工具调试] A股数据前500字符:\n{stock_data[:500]}")
-
-                    result_data.append(f"## A股市场数据\n{stock_data}")
+                    from src.data.market_data import get_kline, format_market_data_for_llm
+                    from src.monitor import log_data_shape
+                    df = get_kline(ticker, adjust="qfq")
+                    if df is not None and len(df) >= 3:
+                        log_data_shape("[桥接] get_kline -> market analyst", df)
+                        stock_data = format_market_data_for_llm(df, ticker)
+                        log_data_shape("[桥接] format_market_data_for_llm -> market analyst", stock_data)
+                        result_data.append(stock_data)
+                        logger.info(f"[桥接] A股市场数据获取成功: {len(df)}行, 最新收盘={df['close'].iloc[-1]:.2f}")
+                    else:
+                        result_data.append(
+                            f"❌ 无法获取 {ticker} 的真实行情数据（数据源返回空或数据量不足）。\n"
+                            "本次分析终止。请检查网络连接后重试，或在配置向导中填写 Tushare Token 作为备用数据源。"
+                        )
                 except Exception as e:
-                    logger.error(f"❌ [市场工具调试] A股数据获取失败: {e}")
-                    result_data.append(f"## A股市场数据\n获取失败: {e}")
+                    logger.error(f"[桥接] A股数据获取失败: {e}")
+                    result_data.append(
+                        f"❌ 无法获取 {ticker} 的真实行情数据: {str(e)[:200]}。\n"
+                        "本次分析终止。请检查网络或数据源配置。"
+                    )
 
             elif is_hk:
                 # 港股：使用AKShare数据源
@@ -1192,67 +1212,42 @@ class Toolkit:
             result_data = []
 
             if is_china or is_hk:
-                # 中国A股和港股：使用AKShare东方财富新闻和Google新闻（中文搜索）
-                logger.info(f"🇨🇳🇭🇰 [统一新闻工具] 处理中文新闻...")
+                # 中国A股和港股：优先使用QuantSage免费新闻桥接
+                logger.info(f"[桥接] 新闻 -> 使用 fetch_china_news() (akshare stock_news_em)")
 
-                # 1. 尝试获取AKShare东方财富新闻
-                try:
-                    # 处理股票代码
-                    clean_ticker = ticker.replace('.SH', '').replace('.SZ', '').replace('.SS', '')\
-                                   .replace('.HK', '').replace('.XSHE', '').replace('.XSHG', '')
-                    
-                    logger.info(f"🇨🇳🇭🇰 [统一新闻工具] 尝试获取东方财富新闻: {clean_ticker}")
-
-                    # 通过 AKShare Provider 获取新闻
-                    from tradingagents.dataflows.providers.china.akshare import AKShareProvider
-
-                    provider = AKShareProvider()
-
-                    # 获取东方财富新闻
-                    news_df = provider.get_stock_news_sync(symbol=clean_ticker)
-
-                    if news_df is not None and not news_df.empty:
-                        # 格式化东方财富新闻
-                        em_news_items = []
-                        for _, row in news_df.iterrows():
-                            # AKShare 返回的字段名
-                            news_title = row.get('新闻标题', '') or row.get('标题', '')
-                            news_time = row.get('发布时间', '') or row.get('时间', '')
-                            news_url = row.get('新闻链接', '') or row.get('链接', '')
-
-                            news_item = f"- **{news_title}** [{news_time}]({news_url})"
-                            em_news_items.append(news_item)
-                        
-                        # 添加到结果中
-                        if em_news_items:
-                            em_news_text = "\n".join(em_news_items)
-                            result_data.append(f"## 东方财富新闻\n{em_news_text}")
-                            logger.info(f"🇨🇳🇭🇰 [统一新闻工具] 成功获取{len(em_news_items)}条东方财富新闻")
-                except Exception as em_e:
-                    logger.error(f"❌ [统一新闻工具] 东方财富新闻获取失败: {em_e}")
-                    result_data.append(f"## 东方财富新闻\n获取失败: {em_e}")
-
-                # 2. 获取Google新闻作为补充
-                try:
-                    # 获取公司中文名称用于搜索
-                    if is_china:
-                        # A股使用股票代码搜索，添加更多中文关键词
+                # 1. 优先：QuantSage 免费新闻桥接（绕过TA-CN断裂的管线）
+                if is_china:
+                    try:
+                        from src.data.market_data import fetch_china_news
+                        from src.monitor import log_data_shape
                         clean_ticker = ticker.replace('.SH', '').replace('.SZ', '').replace('.SS', '')\
                                        .replace('.XSHE', '').replace('.XSHG', '')
-                        search_query = f"{clean_ticker} 股票 公司 财报 新闻"
-                        logger.info(f"🇨🇳 [统一新闻工具] A股Google新闻搜索关键词: {search_query}")
-                    else:
-                        # 港股使用代码搜索
-                        search_query = f"{ticker} 港股"
-                        logger.info(f"🇭🇰 [统一新闻工具] 港股Google新闻搜索关键词: {search_query}")
+                        news_text = fetch_china_news(clean_ticker)
+                        log_data_shape("[桥接] fetch_china_news -> news analyst", news_text)
+                        if news_text:
+                            result_data.append(news_text)
+                            logger.info(f"[桥接] 新闻获取成功，跳过TA-CN管线")
+                        else:
+                            result_data.append(
+                                "❌ 新闻数据暂不可用（AKShare 东方财富个股新闻接口返回空或失败）。\n"
+                                "*数据真实性红线：未获取到真实数据，严禁编造新闻内容。*"
+                            )
+                    except Exception as e:
+                        logger.error(f"[桥接] 新闻获取失败: {e}")
+                        result_data.append(f"❌ 新闻数据获取失败: {str(e)[:200]}")
 
-                    from tradingagents.dataflows.interface import get_google_news
-                    news_data = get_google_news(search_query, curr_date)
-                    result_data.append(f"## Google新闻\n{news_data}")
-                    logger.info(f"🇨🇳🇭🇰 [统一新闻工具] 成功获取Google新闻")
-                except Exception as google_e:
-                    logger.error(f"❌ [统一新闻工具] Google新闻获取失败: {google_e}")
-                    result_data.append(f"## Google新闻\n获取失败: {google_e}")
+                # 2. 备用：Google新闻（仅在桥接未返回时执行）
+                if not result_data:
+                    try:
+                        clean_ticker = ticker.replace('.SH', '').replace('.SZ', '').replace('.SS', '')\
+                                       .replace('.XSHE', '').replace('.XSHG', '')
+                        search_query = f"{clean_ticker} 股票 新闻"
+                        from tradingagents.dataflows.interface import get_google_news
+                        news_data = get_google_news(search_query, curr_date)
+                        if news_data:
+                            result_data.append(f"## Google新闻\n{news_data}")
+                    except Exception as google_e:
+                        logger.error(f"[桥接] Google新闻备用获取失败: {google_e}")
 
             else:
                 # 美股：使用Finnhub新闻
@@ -1320,33 +1315,36 @@ class Toolkit:
             result_data = []
 
             if is_china or is_hk:
-                # 中国A股和港股：使用社交媒体情绪分析
-                logger.info(f"🇨🇳🇭🇰 [统一情绪工具] 处理中文市场情绪...")
+                # 桥接：使用QuantSage免费新闻源作为情绪分析基础数据
+                logger.info(f"[桥接] 情绪 -> 使用 fetch_china_news() 获取真实新闻")
 
                 try:
-                    # 可以集成微博、雪球、东方财富等中文社交媒体情绪
-                    # 目前使用基础的情绪分析
-                    sentiment_summary = f"""
-## 中文市场情绪分析
-
-**股票**: {ticker} ({market_info['market_name']})
-**分析日期**: {curr_date}
-
-### 市场情绪概况
-- 由于中文社交媒体情绪数据源暂未完全集成，当前提供基础分析
-- 建议关注雪球、东方财富、同花顺等平台的讨论热度
-- 港股市场还需关注香港本地财经媒体情绪
-
-### 情绪指标
-- 整体情绪: 中性
-- 讨论热度: 待分析
-- 投资者信心: 待评估
-
-*注：完整的中文社交媒体情绪分析功能正在开发中*
-"""
-                    result_data.append(sentiment_summary)
+                    from src.data.market_data import fetch_china_news
+                    from src.monitor import log_data_shape
+                    clean_ticker = ticker.replace('.SH', '').replace('.SZ', '').replace('.SS', '')\
+                                   .replace('.XSHE', '').replace('.XSHG', '')
+                    news_text = fetch_china_news(clean_ticker)
+                    log_data_shape("[桥接] fetch_china_news -> sentiment analyst", news_text)
+                    if news_text:
+                        result_data.append(
+                            f"## 中文市场情绪分析 (基于真实新闻)\n\n"
+                            f"以下为 {ticker} 的近期真实新闻数据，请基于这些新闻评估市场情绪：\n\n"
+                            f"{news_text}\n\n"
+                            f"⚠️ 数据真实性声明：以上新闻来自东方财富免费接口，均属真实数据。\n"
+                            f"请基于上述真实新闻进行情绪判断，严禁编造任何情绪评分或指数。"
+                        )
+                    else:
+                        result_data.append(
+                            "❌ 情绪数据暂不可用（数据源未配置或获取失败），无法进行分析。\n"
+                            "可能原因：AKShare 未安装、网络不通、或该股票暂无新闻。\n"
+                            "*数据真实性红线：未获取到真实数据，禁止编造情绪评分。*"
+                        )
                 except Exception as e:
-                    result_data.append(f"## 中文市场情绪\n获取失败: {e}")
+                    logger.error(f"[桥接] 情绪数据获取失败: {e}")
+                    result_data.append(
+                        "❌ 情绪数据暂不可用（数据源未配置或获取失败），无法进行分析。\n"
+                        "*数据真实性红线：未获取到真实数据，禁止编造情绪评分。*"
+                    )
 
             else:
                 # 美股：使用Reddit情绪分析
