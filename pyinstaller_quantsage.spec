@@ -44,6 +44,9 @@ _own_datas = [
     (os.path.join(spec_dir, "src", "ui", "assets"), os.path.join("src", "ui", "assets")),
     # Bundle TradingAgents-CN (Apache 2.0 core) — no separate install needed
     (os.path.join(ta_cn_dir, "tradingagents"), "tradingagents"),
+    # Bundle Kronos model code (MIT) — vendored deep learning K-line predictor
+    (os.path.join(spec_dir, "src", "plugins", "kronos_service", "kronos_model"),
+     os.path.join("src", "plugins", "kronos_service", "kronos_model")),
 ]
 
 # ── Hidden imports ──
@@ -101,6 +104,12 @@ _extra_hidden = [
     "fpdf", "markdown_it", "Pygments",
     # fpdf depends on unittest.mock for digital signatures
     "unittest", "unittest.mock",
+
+    # Kronos deep learning model (MIT)
+    "einops", "huggingface_hub", "huggingface_hub.hf_api",
+    "src.plugins.kronos_service.kronos_model",
+    "src.plugins.kronos_service.kronos_model.kronos",
+    "src.plugins.kronos_service.kronos_model.module",
 ]
 
 # === Analysis ===

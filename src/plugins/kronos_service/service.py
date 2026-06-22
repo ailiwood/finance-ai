@@ -37,7 +37,7 @@ app = FastAPI(
 
 # Load config at startup
 config = KronosConfig.from_env()
-engine = get_engine(prefer_gpu=True)
+engine = get_engine()
 engine_summary = get_engine_summary()
 
 

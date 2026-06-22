@@ -95,7 +95,7 @@ def test_stats_engine_horizon_affects_bounds():
 
 def test_get_engine_returns_base_engine():
     """get_engine should always return a working engine."""
-    engine = get_engine(prefer_gpu=True)
+    engine = get_engine()
     assert engine is not None
     # Try a prediction to verify
     ohlcv = _make_ohlcv(30)
@@ -113,7 +113,7 @@ def test_get_engine_summary():
 
 def test_kronos_engine_fallback():
     """KronosEngine should fallback to stats when model not loaded."""
-    engine = KronosEngine(device="cpu")
+    engine = KronosEngine()
     assert not engine.is_loaded  # Kronos model not yet available
     ohlcv = _make_ohlcv(30)
     result = engine.predict(ohlcv, horizon_days=5)

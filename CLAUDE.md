@@ -109,7 +109,7 @@ quantsage/
 
 - [x] **M1 打地基** — Fork TradingAgents-CN，Docker 跑通，分析一只 A股 ✅ (2025-06-20)
 - [x] **M2 配置向导 + 免责关口** — 免责弹窗 + 3步配置向导 + 加密持久化 ✅ (2025-06-20)
-- [x] **M3 Kronos 插件（GPU 可选）** — FastAPI 微服务 + GPU 检测 + 统计降级 ✅ (2025-06-20)
+- [x] **M3 Kronos 插件（GPU 可选）** — FastAPI 微服务 + Kronos-base (102.3M, MIT) + CPU/GPU双模式 + 统计降级 ✅ (2025-06-20 → 2026-06-22)
 - [x] **M4 FinBERT 情绪插件** — 情绪打分 + 批量新闻评分 + 情绪指数 ✅ (2025-06-21)
 - [x] **M5 报告 + 合规** — 报告模板 + PDF 导出 + 合规扫描 ✅ (2025-06-21)
 - [x] **M6 方案 A 可分发** — Docker Compose + GPU profiles + 安装指南 ✅ (2025-06-21)

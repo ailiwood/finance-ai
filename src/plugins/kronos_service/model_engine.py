@@ -211,118 +211,245 @@ def _log_return(p0: float, p1: float) -> float:
     return math.log(p1 / p0)
 
 
-# === Kronos Engine (GPU, optional) ===
+# === Kronos Engine (Deep Learning, MIT) ===
 
-# Try importing Kronos dependencies at module level
-_HAS_KRONOS = False
-_KronosModel = None
-_KronosTokenizer = None
+# ── Lazy import of vendored Kronos model ──
+_KronosPredictor = None
+_HAS_KRONOS_CODE = False
 
-try:
-    from transformers import AutoModel, AutoTokenizer
-    _HAS_KRONOS = True
-except ImportError:
-    pass
+def _try_import_kronos():
+    """Lazy-import Kronos model classes from vendored code."""
+    global _KronosPredictor, _HAS_KRONOS_CODE
+    if _HAS_KRONOS_CODE:
+        return True
+    try:
+        from src.plugins.kronos_service.kronos_model.kronos import (
+            Kronos, KronosTokenizer, KronosPredictor
+        )
+        _KronosPredictor = KronosPredictor
+        _HAS_KRONOS_CODE = True
+        return True
+    except ImportError as e:
+        warnings.warn(f"Kronos model code unavailable: {e}")
+        return False
+    except Exception as e:
+        warnings.warn(f"Kronos import failed: {e}")
+        return False
 
 
 class KronosEngine(BaseEngine):
-    """Kronos-based prediction engine.
+    """Kronos deep-learning prediction engine (MIT license, AAAI 2026).
 
-    Uses the Kronos K-line foundation model (MIT) for OHLCV-native forecasting.
-    Loads from HuggingFace: NeoQuasar/Kronos-mini
+    Uses Kronos-base (102.3M params) — a Transformer model pre-trained on
+    OHLCV data for probabilistic K-line forecasting.
+    Loads from HuggingFace: NeoQuasar/Kronos-base + Kronos-Tokenizer-base.
 
-    Falls back to StatsEngine if model loading fails.
+    Lazy-loading: model is downloaded on first predict() call, not at import time.
+    Falls back to StatsEngine on any loading/inference failure.
     """
 
-    _MODEL_ID = "NeoQuasar/Kronos-mini"
+    _MODEL_NAME = "NeoQuasar/Kronos-base"                # hardcoded, no mini/small
+    _TOKENIZER_NAME = "NeoQuasar/Kronos-Tokenizer-base"  # hardcoded
+    _MAX_CONTEXT = 512
 
-    def __init__(self, device: str = "cpu") -> None:
-        self._device = device
+    def __init__(self) -> None:
+        self._device = None
         self._loaded = False
-        self._name = "kronos_mini"
-        self._model = None
-        self._tokenizer = None
+        self._predictor = None
+        self._load_error = None
 
-        if not _HAS_KRONOS:
-            return
+    # ── Lazy load ──
+
+    def _lazy_load(self) -> bool:
+        """Download and initialize Kronos model on first use. Returns True if ready."""
+        if self._loaded:
+            return True
+        if not _try_import_kronos():
+            self._load_error = "Kronos model code not importable (missing einops/huggingface_hub?)"
+            return False
 
         try:
-            self._load_model()
-        except Exception as e:
-            warnings.warn(f"Kronos model loading failed: {e}. Using stats fallback.")
+            from .gpu_detector import pick_device
+            self._device = pick_device()
 
-    def _load_model(self) -> None:
-        """Load Kronos model from HuggingFace."""
-        # This is a forward-compatible loader.
-        # When the Kronos model is available on HF, this will load it.
-        # For now, the StatsEngine provides the actual predictions.
-        #
-        # Future: self._model = AutoModel.from_pretrained(self._MODEL_ID)
-        #         self._tokenizer = AutoTokenizer.from_pretrained(self._MODEL_ID)
-        #
-        # For now, mark as not loaded so get_engine falls back to StatsEngine.
-        self._loaded = False
+            # Allow user to set HF mirror for China mainland
+            import os as _os
+            _hf_endpoint = _os.environ.get("HF_ENDPOINT", "")
+            if _hf_endpoint:
+                _os.environ.setdefault("HF_ENDPOINT", _hf_endpoint)
+
+            # Download & load from HuggingFace Hub
+            from src.plugins.kronos_service.kronos_model.kronos import (
+                Kronos, KronosTokenizer
+            )
+            tokenizer = KronosTokenizer.from_pretrained(self._TOKENIZER_NAME)
+            model = Kronos.from_pretrained(self._MODEL_NAME)
+            self._predictor = _KronosPredictor(
+                model, tokenizer,
+                device=self._device,
+                max_context=self._MAX_CONTEXT,
+            )
+            self._loaded = True
+            return True
+        except Exception as e:
+            self._load_error = str(e)[:200]
+            warnings.warn(f"Kronos loading failed: {e}. Will use StatsEngine fallback.")
+            return False
+
+    # ── Properties ──
 
     @property
     def name(self) -> str:
-        return self._name if self._loaded else "kronos_unavailable"
+        if self._loaded:
+            gpu = "GPU" if (self._device and self._device.startswith("cuda")) else "CPU"
+            return f"Kronos-base (深度学习模型, {gpu}模式)"
+        if self._load_error:
+            return f"Kronos-base (未加载: {self._load_error[:60]})"
+        return "Kronos-base (未加载)"
 
     @property
     def uses_gpu(self) -> bool:
-        return self._loaded and self._device.startswith("cuda")
+        return self._loaded and bool(self._device and self._device.startswith("cuda"))
 
     @property
     def is_loaded(self) -> bool:
-        """Whether the Kronos model is successfully loaded."""
         return self._loaded
+
+    # ── Predict ──
 
     def predict(
         self,
         ohlcv: List[OhlcvRow],
         horizon_days: int = 5,
     ) -> PredictionResult:
-        """Generate prediction using Kronos model.
+        """Generate probabilistic K-line forecast using Kronos-base.
 
-        Falls back to statistical baseline since Kronos model
-        is not yet loaded from HuggingFace (awaiting model release).
+        Uses Monte Carlo sampling (sample_count=30) for uncertainty intervals.
+        Automatically clips lookback to _MAX_CONTEXT (512).
+
+        Returns PredictionResult with direction, confidence, target_price,
+        lower_bound, upper_bound, and mandatory disclaimer.
         """
-        fallback = StatsEngine()
-        result = fallback.predict(ohlcv, horizon_days)
-        # Override method name to indicate attempted Kronos
-        result["method"] = "kronos_fallback_stats"
+        # Lazy load on first call
+        if not self._lazy_load():
+            return StatsEngine().predict(ohlcv, horizon_days)
+
+        try:
+            import pandas as pd
+
+            # Build OHLCV DataFrame from input rows
+            df = pd.DataFrame(ohlcv)
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+            for col in ("open", "high", "low", "close"):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+            df = df.dropna(subset=["open", "high", "low", "close"])
+
+            if len(df) < 20:
+                return self._fallback_result(ohlcv, horizon_days, "data too short (<20 rows)")
+
+            # Clip to max context
+            if len(df) > self._MAX_CONTEXT:
+                df = df.tail(self._MAX_CONTEXT)
+
+            # Build timestamps for Kronos predictor
+            x_timestamp = df["date"] if "date" in df.columns else pd.Series(range(len(df)))
+            freq = pd.infer_freq(x_timestamp) or pd.tseries.frequencies.to_offset("B")
+            last_ts = x_timestamp.iloc[-1]
+            y_timestamp = pd.date_range(
+                start=last_ts + pd.Timedelta(days=1),
+                periods=horizon_days,
+                freq=freq,
+            )
+
+            # Run Monte Carlo prediction
+            pred_len = min(horizon_days, 30)
+            sample_count = max(10, min(30, horizon_days * 3))
+
+            pred_df = self._predictor.predict(
+                df=df[["open", "high", "low", "close"]],
+                x_timestamp=x_timestamp,
+                y_timestamp=y_timestamp,
+                pred_len=pred_len,
+                T=1.0,
+                top_p=0.9,
+                sample_count=sample_count,
+            )
+
+            # Extract prediction from Monte Carlo samples
+            if pred_df is None or pred_df.empty:
+                return self._fallback_result(ohlcv, horizon_days, "prediction returned empty")
+
+            # pred_df columns after sample_count>1: open_0, high_0, ..., open_1, high_1, ...
+            close_cols = [c for c in pred_df.columns if c.startswith("close")]
+            if not close_cols:
+                return self._fallback_result(ohlcv, horizon_days, "no close predictions")
+
+            closes = pred_df[close_cols].values  # shape: (horizon, sample_count)
+            mean_close = float(closes.mean())
+            std_close = float(closes.std())
+
+            current_price = float(df["close"].iloc[-1])
+            target_price = round(mean_close, 2)
+            lower_bound = round(mean_close - 2 * std_close, 2)
+            upper_bound = round(mean_close + 2 * std_close, 2)
+
+            # Direction
+            if target_price > current_price * 1.005:
+                direction = "up"
+                confidence = min(0.95, 0.5 + abs(target_price / current_price - 1) * 10)
+            elif target_price < current_price * 0.995:
+                direction = "down"
+                confidence = min(0.95, 0.5 + abs(1 - target_price / current_price) * 10)
+            else:
+                direction = "neutral"
+                confidence = 0.5 + (1 - abs(target_price / current_price - 1) * 20)
+
+            return PredictionResult(
+                direction=direction,
+                confidence=round(confidence, 3),
+                target_price=target_price,
+                current_price=current_price,
+                lower_bound=lower_bound,
+                upper_bound=upper_bound,
+                horizon_days=pred_len,
+                method=self.name,
+                disclaimer=(
+                    "基于深度学习模型 (Kronos-base) 的概率性预测，非确定性结论，"
+                    "仅供参考研究，不构成任何投资建议。"
+                ),
+            )
+        except Exception as e:
+            warnings.warn(f"Kronos prediction failed: {e}")
+            return self._fallback_result(ohlcv, horizon_days, f"prediction error: {str(e)[:100]}")
+
+    def _fallback_result(
+        self, ohlcv: List[OhlcvRow], horizon_days: int, reason: str = ""
+    ) -> PredictionResult:
+        """Graceful fallback to StatsEngine."""
+        result = StatsEngine().predict(ohlcv, horizon_days)
+        result["method"] = f"kronos_fallback_stats ({reason})" if reason else "kronos_fallback_stats"
         return result
 
 
 # === Engine Factory ===
 
-def get_engine(prefer_gpu: bool = True) -> BaseEngine:
+def get_engine() -> BaseEngine:
     """Factory: return the best available prediction engine.
 
-    Resolution order:
-    1. Kronos (GPU) — if GPU available and Kronos loads successfully
-    2. Kronos (CPU) — if no GPU but Kronos loads
-    3. StatsEngine — always available baseline
-
-    Args:
-        prefer_gpu: If True, try GPU-accelerated engines first.
+    Kronos-base is preferred but NOT loaded here (lazy loading).
+    Loading happens on first predict() call.
+    If Kronos loading fails at predict time, StatsEngine is used automatically.
 
     Returns:
-        Best available BaseEngine instance.
+        KronosEngine (with lazy-load) — falls back to StatsEngine on failure.
     """
-    # Try Kronos first
+    # Always return KronosEngine first — it handles its own fallback
     try:
-        from .gpu_detector import detect_gpu
-        gpu_info = detect_gpu()
-        device = "cuda:0" if (prefer_gpu and gpu_info.available) else "cpu"
-    except ImportError:
-        device = "cpu"
-
-    kronos = KronosEngine(device=device)
-    if kronos.is_loaded:
-        return kronos
-
-    # Fallback: Statistical baseline (always works)
-    return StatsEngine()
+        return KronosEngine()
+    except Exception:
+        return StatsEngine()
 
 
 def get_engine_summary() -> Dict[str, Any]:
@@ -333,7 +460,7 @@ def get_engine_summary() -> Dict[str, Any]:
     except ImportError:
         gpu_info = None
 
-    engine = get_engine(prefer_gpu=True)
+    engine = get_engine()
 
     return {
         "engine_name": engine.name,

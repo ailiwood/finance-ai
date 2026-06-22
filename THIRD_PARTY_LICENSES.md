@@ -61,3 +61,6 @@
 ---
 
 _本文件随依赖引入持续更新。引入 GPL/AGPL 依赖前必须先问用户。_
+| Kronos | vendored (102.3M base) | MIT | K线深度学习预测 (Transformer) | https://github.com/shiyu-coder/Kronos |
+| einops | 0.8.2 | MIT | 张量操作重排 | https://github.com/arogozhnikov/einops |
+| huggingface_hub | latest | Apache 2.0 | HuggingFace 模型下载 | https://github.com/huggingface/huggingface_hub |
