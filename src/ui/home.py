@@ -105,6 +105,9 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
         ta_config["deep_think_llm"] = "deepseek-chat"
         ta_config["quick_think_llm"] = "deepseek-chat"
         ta_config["max_debate_rounds"] = max(1, min(3, depth // 2))
+        # Ensure LLM has enough output tokens for complete reports
+        ta_config["deep_model_config"] = {"max_tokens": 8000, "temperature": 0.3, "timeout": 300}
+        ta_config["quick_model_config"] = {"max_tokens": 8000, "temperature": 0.7, "timeout": 180}
         ta_config["online_tools"] = False
         ta_config["online_news"] = False
         ta_config["realtime_data"] = False
