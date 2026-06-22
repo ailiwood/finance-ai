@@ -134,13 +134,15 @@ quantsage/
 - [x] format_market_data_for_llm(df) 独立函数 + 10 单测
 - [x] 情绪面禁编造红线: social_media/news analyst 提示词修复
 - [x] 接通免费情绪源: AKShare stock_news_em（东方财富个股新闻）
+- [x] 硬件检测 + GPU 可选升级（三层方案: CPU默认→nvidia-smi检测→用户升级）
+- [x] 全量测试 17/17 通过（数据链路+CPU部署+硬件检测）
 - [ ] exe打包验证(用户侧)
 - [ ] Inno Setup 安装器重新构建
 
 ### M7 架构要点
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包
+- **GPU 方案**: 安装包内置 CPU 版 torch（开箱即用）；启动时 nvidia-smi 自动检测；UI 引导用户主动升级 CUDA 版（pip install torch cu124）；失败回退 CPU 版
 - **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
-- **GPU 插件**: 可选 Inno Setup 组件 + 应用内下载管理器，CUDA 12.8 向下兼容 30/40/50 系
 - **TradingAgents-CN**: pip install 后置步骤，不捆绑
 
 **已知问题**：

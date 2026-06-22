@@ -233,35 +233,53 @@ def show_home() -> None:
     with st.expander("系统状态", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
-            # GPU
+            # GPU / Hardware detection (三层方案: CPU默认→检测引导→用户升级)
             try:
-                from src.plugins.kronos_service.gpu_detector import detect_gpu, format_gpu_summary
-                gpu_info = detect_gpu()
-                if gpu_info.available:
-                    st.markdown(f'<span style="color:#4caf50;">✅ GPU: {gpu_info.name} ({gpu_info.vram_gb:.0f}GB)</span>', unsafe_allow_html=True)
+                from src.deployment.gpu_upgrade import get_upgrade_info
+                hw_info = get_upgrade_info()
+                mode = hw_info["compute_mode"]
+                gpu = hw_info["gpu_name"]
+
+                if mode == "gpu_enabled":
+                    st.markdown(
+                        f'<span style="color:#4caf50;">GPU 加速已启用 ({gpu})</span>',
+                        unsafe_allow_html=True,
+                    )
+                elif mode == "cpu_upgradable":
+                    st.markdown(
+                        f'<span style="color:#fbbf24;">检测到 {gpu}</span>'
+                        f'<br><span style="color:#9ca3af;font-size:0.8rem;">当前: CPU 模式。可升级 GPU 版获得更快 K线预测速度</span>',
+                        unsafe_allow_html=True,
+                    )
+                    # Upgrade button
+                    if st.button("升级 GPU 版", type="secondary", key="gpu_upgrade_btn",
+                                 help="安装 CUDA 版 PyTorch，下载约 2.5GB，需要 NVIDIA 驱动"):
+                        st.session_state.show_gpu_upgrade = True
+                        st.rerun()
                 else:
-                    st.caption("⬜ GPU: 未检测到（将使用统计基线引擎）")
+                    st.caption("CPU 模式（适用于所有电脑）")
             except Exception:
-                st.caption("⬜ GPU: 检测不可用")
+                st.caption("CPU 模式")
+
             # TA engine (bundled)
-            st.markdown(f'<span style="color:#4caf50;">✅ 分析引擎: TradingAgents-CN</span>', unsafe_allow_html=True)
+            st.markdown(f'<span style="color:#4caf50;">分析引擎: TradingAgents-CN</span>', unsafe_allow_html=True)
             # Data source
             ds = config.get("default_china_data_source", "akshare")
             ds_names = {"akshare": "AkShare（免费，免注册）", "tushare": "Tushare", "baostock": "BaoStock"}
             ds_label = ds_names.get(ds, ds)
             if config.get("tushare_token"):
-                st.markdown(f'<span style="color:#4caf50;">✅ 数据源: {ds_label}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="color:#4caf50;">数据源: {ds_label}</span>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<span style="color:#4caf50;">✅ 数据源: {ds_label}</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="color:#4caf50;">数据源: {ds_label}</span>', unsafe_allow_html=True)
             st.caption("默认使用 AkShare 免费数据，覆盖A股/指数/基金。非交易日数据为空属正常。")
         with col2:
             # Network
             try:
                 import urllib.request
                 urllib.request.urlopen("https://api.deepseek.com", timeout=3)
-                st.markdown(f'<span style="color:#4caf50;">✅ 网络: DeepSeek API 可达</span>', unsafe_allow_html=True)
+                st.markdown(f'<span style="color:#4caf50;">网络: DeepSeek API 可达</span>', unsafe_allow_html=True)
             except Exception:
-                st.caption("⬜ 网络: 无法连接到 DeepSeek API")
+                st.caption("网络: 无法连接到 DeepSeek API")
             # Disk
             try:
                 import shutil
@@ -269,6 +287,74 @@ def show_home() -> None:
                 st.caption(f"磁盘可用: {free_gb:.1f} GB")
             except Exception:
                 st.caption("磁盘: 检测不可用")
+
+    # ── GPU Upgrade Dialog ──
+    if st.session_state.get("show_gpu_upgrade", False):
+        st.markdown("---")
+        st.markdown("### GPU 升级向导")
+        try:
+            from src.deployment.gpu_upgrade import check_upgrade_prerequisites, _DOWNLOAD_SIZE_GB, _CUDA_TAG
+
+            ready, pre_msg = check_upgrade_prerequisites()
+            st.info(pre_msg.replace("\n", "\n\n"))
+
+            if ready:
+                st.warning(
+                    f"即将下载 CUDA 版 PyTorch（约 {_DOWNLOAD_SIZE_GB} GB），"
+                    f"需要稳定的网络连接和较新的 NVIDIA 驱动。\n\n"
+                    f"升级过程中请勿关闭应用。"
+                )
+
+                col_a, col_b, col_c = st.columns([1, 1, 2])
+                with col_a:
+                    if st.button("确认升级", type="primary", key="confirm_gpu_upgrade"):
+                        st.session_state.gpu_upgrading = True
+                        st.rerun()
+                with col_b:
+                    if st.button("取消", key="cancel_gpu_upgrade"):
+                        st.session_state.show_gpu_upgrade = False
+                        st.rerun()
+            else:
+                if st.button("关闭", key="close_gpu_info"):
+                    st.session_state.show_gpu_upgrade = False
+                    st.rerun()
+        except Exception as e:
+            st.error(f"硬件检测失败: {e}")
+            if st.button("关闭", key="close_gpu_error"):
+                st.session_state.show_gpu_upgrade = False
+                st.rerun()
+
+        st.markdown("---")
+
+    # ── GPU Upgrade Execution ──
+    if st.session_state.get("gpu_upgrading", False):
+        st.markdown("### GPU 升级进行中...")
+        progress_bar = st.progress(0.0)
+        status_text = st.empty()
+
+        def _ui_progress(msg: str, fraction: float):
+            status_text.text(msg)
+            progress_bar.progress(min(fraction, 1.0))
+
+        try:
+            from src.deployment.gpu_upgrade import upgrade_to_gpu
+            success, message = upgrade_to_gpu(progress_callback=_ui_progress)
+
+            if success:
+                st.success(message)
+                st.info("请重启应用以启用 GPU 加速。")
+            else:
+                st.error(message)
+                st.info("CPU 版功能不受影响，可以继续使用。")
+        except Exception as e:
+            st.error(f"升级过程出现异常: {e}")
+        finally:
+            st.session_state.gpu_upgrading = False
+            st.session_state.show_gpu_upgrade = False
+            if st.button("确定", key="dismiss_gpu_result"):
+                st.rerun()
+
+        st.markdown("---")
 
     # ── Stock Analysis Section ──
     st.markdown('<div class="analysis-card">', unsafe_allow_html=True)
