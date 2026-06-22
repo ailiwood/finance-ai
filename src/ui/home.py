@@ -81,7 +81,7 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
 
     # ── Generate trace ID for this analysis ──
     from src.monitor import new_trace, get_logger, mask_secret, log_data_shape
-    trace = new_trace()
+    trace = new_trace(symbol)
     log = get_logger("analysis")
     log.info("[START] analysis: symbol=%s, market=%s, depth=%d", symbol, market, depth)
 

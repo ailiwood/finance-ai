@@ -414,37 +414,68 @@ def clear_cache():
 # ═══════════════════════════════════════════════════════════════
 
 def fetch_china_news(symbol: str, max_news: int = 10) -> str:
-    """Fetch real A-share news via AKShare (EastMoney stock_news_em). FREE, no API key.
+    """Fetch real A-share news via EastMoney API directly. FREE, no API key.
+
+    Bypasses akshare.stock_news_em which has a pyarrow bug in v1.18.x.
+    Uses raw HTTP to EastMoney's JSON API.
 
     Returns formatted news text, or empty string on failure.
     """
+    # Method 1: EastMoney direct API (no akshare, no pyarrow dependency)
+    try:
+        import requests
+        # EastMoney stock notice/announcement API
+        url = "https://np-anotice-stock.eastmoney.com/api/security/ann"
+        params = {
+            "sr": -1, "page_size": max_news, "page_index": 1,
+            "ann_type": "A", "client_source": "web",
+            "stock_list": symbol,
+        }
+        r = requests.get(url, params=params, timeout=15,
+                        headers={"User-Agent": "Mozilla/5.0"})
+        data = r.json()
+        items = data.get("data", {}).get("list", [])
+        if items:
+            lines = [
+                f"## {symbol} 个股新闻 (来源: 东方财富公告, 免费)",
+                f"共获取 {len(items)} 条公告/新闻：\n"
+            ]
+            for item in items[:max_news]:
+                title = item.get("title", "") or item.get("announcementTitle", "")
+                date_str = item.get("notice_date", "") or item.get("publishDate", "")
+                if title:
+                    lines.append(f"- [{date_str}] {title}")
+            result = "\n".join(lines)
+            _log(f"fetch_china_news({symbol}): EastMoney直接API → {len(items)} 条")
+            if len(items) > 0:
+                return result
+    except Exception as e:
+        _log(f"fetch_china_news EastMoney直接API失败: {e}")
+
+    # Method 2: Fallback to akshare (may fail on pyarrow bug)
     try:
         import akshare as ak
         df = ak.stock_news_em(symbol=symbol)
-        if df is None or df.empty:
-            _log(f"stock_news_em({symbol}) 返回空")
-            return ""
-
-        df = df.head(max_news)
-        lines = [
-            f"## {symbol} 个股新闻 (来源: 东方财富, 免费接口)",
-            f"共获取 {len(df)} 条新闻：\n"
-        ]
-        for _, row in df.iterrows():
-            title = str(row.get("新闻标题", row.get("title", "")))
-            time_str = str(row.get("发布时间", row.get("time", "")))
-            if title and title != "nan":
-                lines.append(f"- [{time_str}] {title}")
-
-        result = "\n".join(lines)
-        _log(f"fetch_china_news({symbol}): {len(df)} 条新闻")
-        return result
+        if df is not None and not df.empty:
+            df = df.head(max_news)
+            lines = [
+                f"## {symbol} 个股新闻 (来源: AKShare/东方财富, 免费)",
+                f"共获取 {len(df)} 条新闻：\n"
+            ]
+            for _, row in df.iterrows():
+                title = str(row.get("新闻标题", row.get("title", "")))
+                time_str = str(row.get("发布时间", row.get("time", "")))
+                if title and title != "nan":
+                    lines.append(f"- [{time_str}] {title}")
+            result = "\n".join(lines)
+            _log(f"fetch_china_news({symbol}): AKShare fallback → {len(df)} 条")
+            return result
     except ImportError:
-        _log("akshare 未安装 — 新闻功能不可用")
-        return ""
+        _log("fetch_china_news: akshare 未安装")
     except Exception as e:
-        _log(f"fetch_china_news({symbol}) 失败: {e}")
-        return ""
+        _log(f"fetch_china_news AKShare备用也失败: {e}")
+
+    return ""
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -61,10 +61,42 @@ def mask_secret(value: Any) -> str:
 
 # ── Trace ID ──
 
-def new_trace() -> str:
-    """Generate a new trace ID and set it as the current context."""
+def new_trace(symbol: str = "") -> str:
+    """Generate a new trace ID and set it as the current context.
+
+    If symbol is provided, also creates a per-analysis log file:
+      quantsage_YY-MM-DD_HH-MM_{symbol}_{trace}.log
+    """
     tid = token_hex(4)  # 8 hex chars
     _trace_var.set(tid)
+
+    if symbol:
+        try:
+            now = datetime.now().strftime("%Y-%m-%d_%H-%M")
+            safe_sym = symbol.replace("/", "_").replace("\\", "_")[:12]
+            trace_log = _LOG_DIR / f"quantsage_{now}_{safe_sym}_{tid}.log"
+
+            # Add a file handler dedicated to this trace
+            root = logging.getLogger("quantsage")
+            th = logging.FileHandler(str(trace_log), encoding="utf-8")
+            th.setLevel(logging.DEBUG)
+            th.setFormatter(logging.Formatter(
+                "%(asctime)s | %(levelname)-5s | %(trace)s | %(name)s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            ))
+            th.addFilter(_TraceFilter())
+            root.addHandler(th)
+
+            # Store reference so we can clean up later
+            if not hasattr(root, "_trace_handlers"):
+                root._trace_handlers = []
+            root._trace_handlers.append(th)
+
+            log = logging.getLogger("quantsage")
+            log.info("Trace log file: %s", trace_log)
+        except Exception:
+            pass
+
     return tid
 
 
@@ -105,11 +137,12 @@ def setup_logging(level: int = logging.DEBUG) -> logging.Logger:
     ch.setFormatter(_ColoredFormatter("%(asctime)s [%(levelname)-4s] %(message)s", datefmt="%H:%M:%S"))
 
     # ── File handler: DEBUG full trace (for post-mortem) ──
-    today = datetime.now().strftime("%Y-%m-%d")
+    # File name includes hour-minute so each session has its own log
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M")
     fh = RotatingFileHandler(
-        str(_LOG_DIR / f"quantsage_{today}.log"),
+        str(_LOG_DIR / f"quantsage_{now}.log"),
         maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=7,
+        backupCount=14,
         encoding="utf-8",
     )
     fh.setLevel(logging.DEBUG)
