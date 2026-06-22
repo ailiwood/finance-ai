@@ -78,17 +78,24 @@ _ANALYSIS_MAILBOX: dict | None = None
 def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
     """Run TradingAgents-CN analysis in background thread. Result goes to _ANALYSIS_MAILBOX."""
     global _ANALYSIS_MAILBOX
+
+    # ── Generate trace ID for this analysis ──
+    from src.monitor import new_trace, get_logger, mask_secret, log_data_shape
+    trace = new_trace()
+    log = get_logger("analysis")
+    log.info("[START] analysis: symbol=%s, market=%s, depth=%d", symbol, market, depth)
+
     try:
         os.environ.setdefault("PYTHONIOENCODING", "utf-8")
         os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1,eastmoney.com,push2.eastmoney.com,gtimg.cn,sinaimg.cn,api.tushare.pro,baostock.com,api.deepseek.com")
 
         config = load_config()
         ds_key = (config.get("deepseek_api_key", "") or os.getenv("DEEPSEEK_API_KEY", "")).strip()
+        log.info("[KEY] deepseek key: %s", mask_secret(ds_key))
         if not ds_key:
             _ANALYSIS_MAILBOX = {"error": "未配置 DeepSeek API Key"}
+            log.warning("[ABORT] no DeepSeek key configured")
             return
-
-        # Debug: log masked key so user can verify it matches what they configured
         ds_masked = ds_key[:4] + "****" + ds_key[-4:] if len(ds_key) > 8 else "****"
         print(f"[DEBUG] _run_analysis: DEEPSEEK_API_KEY len={len(ds_key)}, masked={ds_masked}")
 
@@ -603,7 +610,7 @@ def show_home() -> None:
         return
 
     # ── Bottom actions ──
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     with col1:
         if st.button("重新配置", use_container_width=True, key="reconfig_btn"):
             st.session_state.config_complete = False
@@ -637,6 +644,21 @@ def show_home() -> None:
         if st.button("金融学习", use_container_width=True, key="learn_btn"):
             st.session_state.show_learning = not st.session_state.get("show_learning", False)
             st.rerun()
+    with col7:
+        if st.button("诊断日志", use_container_width=True, key="diag_btn"):
+            from src.monitor.diagnostics import export_diagnostics
+            try:
+                zip_path = export_diagnostics()
+                with open(zip_path, "rb") as f:
+                    st.download_button(
+                        "下载诊断包 (ZIP)", data=f.read(),
+                        file_name=zip_path.split("/")[-1].split("\\")[-1],
+                        mime="application/zip",
+                        use_container_width=True,
+                    )
+                st.success(f"诊断包已生成：{zip_path}")
+            except Exception as e:
+                st.error(f"生成诊断包失败：{e}")
 
     # ── Financial Learning Hub ──
     if st.session_state.get("show_learning", False):

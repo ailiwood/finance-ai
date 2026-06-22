@@ -38,9 +38,11 @@ try:
 except Exception:
     pass
 
-# ── Logging: file + console ──
-from src.core.logging_config import setup_logging
-_log = setup_logging()
+# ── Monitoring: unified logger + unhandled exception hook ──
+from src.monitor import setup_logging, install_excepthook, get_logger
+setup_logging()
+install_excepthook()
+_log = get_logger("app")
 
 import streamlit as st
 

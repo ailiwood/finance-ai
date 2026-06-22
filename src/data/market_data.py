@@ -287,6 +287,10 @@ def get_kline(
     start_str = start.strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
 
+    # ── Checkpoint: get_kline entry ──
+    from src.monitor import log_data_shape
+    log_data_shape(f"get_kline({symbol}) entry", {"symbol": symbol, "start": start_str, "end": end_str, "adjust": adjust})
+
     _log(f"get_kline({symbol}) → 4源链: BaoStock→Sina→Tushare→东财")
 
     # Chain of sources — try each, first success wins
@@ -306,6 +310,8 @@ def get_kline(
             df.attrs["adjust"] = _adjust_used or "qfq"
             # Remove legacy global state to prevent stale reads
             _source_used, _adjust_used = "", ""
+            # ── Checkpoint: get_kline return ──
+            log_data_shape("get_kline return", df)
             return df
 
     raise RuntimeError(
