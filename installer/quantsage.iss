@@ -7,7 +7,7 @@
 #define AppVersion "1.0.0"
 #define AppPublisher "ailiwood"
 #define AppURL "https://github.com/ailiwood/finance-ai"
-#define LicensePrice "$19.90 (USD)"
+#define LicensePrice "19.90 RMB"
 
 [Setup]
 AppId={{B8F4A3E2-7D1C-4A9B-8E2F-6C5D4A3B2C1F}
@@ -39,6 +39,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Alipay QR code — displayed on license purchase page
+Source: "assets\pay_qr.bmp"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy nocompression
 
 [Tasks]
 Name: "desktopicon"; Description: "Create &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
@@ -68,6 +70,7 @@ Type: filesandordirs; Name: "{app}"
 
 var
   LicensePage: TInputQueryWizardPage;
+  QrImage: TBitmapImage;
   SerialValid: Boolean;
 
 // ── Offline license key validation (modular checksum, matches keygen.py) ──
@@ -157,39 +160,44 @@ procedure InitializeWizard;
 var
   DisclaimerText: String;
 begin
-  WizardForm.Caption := 'QuantSage v{#AppVersion} — Installation';
+  WizardForm.Caption := 'QuantSage v{#AppVersion} — Purchase License';
 
-  // ── Custom Page 1: Disclaimer + Purchase Info ──
+  // Extract Alipay QR code to temp folder for display
+  ExtractTemporaryFile('pay_qr.bmp');
+
+  // ── Custom Page: License Purchase ──
   DisclaimerText :=
     '========================================================' + #13#10 +
-    '  QUANTSAGE SOFTWARE LICENSE' + #13#10 +
+    '  QUANTSAGE — License Agreement & Risk Disclaimer' + #13#10 +
     '========================================================' + #13#10 + #13#10 +
-    '1. SOFTWARE PURPOSE' + #13#10 +
-    '   QuantSage is a stock RESEARCH tool for reference only.' + #13#10 +
-    '   It produces analysis reports, NOT trading orders.' + #13#10 +
-    '   It does NOT integrate with any brokerage or exchange.' + #13#10 + #13#10 +
-    '2. RISK WARNING' + #13#10 +
-    '   This software is for RESEARCH REFERENCE ONLY.' + #13#10 +
-    '   It does NOT constitute investment advice.' + #13#10 +
-    '   All investment decisions are at your OWN RISK.' + #13#10 +
-    '   Past performance does not guarantee future results.' + #13#10 + #13#10 +
-    '3. DATA ACCURACY' + #13#10 +
-    '   Market data comes from free public sources (BaoStock, AKShare).' + #13#10 +
-    '   The developer does NOT guarantee data accuracy or timeliness.' + #13#10 + #13#10 +
-    '4. PURCHASE & LICENSE' + #13#10 +
-    '   License Fee: {#LicensePrice} (one-time purchase, lifetime use)' + #13#10 +
-    '   Each license key is for ONE machine only.' + #13#10 +
+    '1. PURPOSE: QuantSage is a stock RESEARCH tool. It produces' + #13#10 +
+    '   analysis reports, NOT trading orders. No brokerage integration.' + #13#10 + #13#10 +
+    '2. RISK WARNING: For RESEARCH REFERENCE ONLY. Does NOT constitute' + #13#10 +
+    '   investment advice. All investment decisions at YOUR OWN RISK.' + #13#10 + #13#10 +
+    '3. LICENSE: {#LicensePrice} one-time purchase, lifetime use.' + #13#10 +
     '   Unauthorized distribution or cracking is prohibited.' + #13#10 + #13#10 +
-    'By clicking "I Agree" and proceeding, you accept ALL terms above.';
+    'By proceeding, you accept ALL terms above.';
 
   LicensePage := CreateInputQueryPage(wpWelcome,
-    'License Agreement & Purchase',
-    'Please read the terms below carefully.',
-    DisclaimerText + #13#10 + #13#10 +
-    'Enter your license key to continue:' + #13#10 +
-    '(Purchase via: Douyin/TikTok @23230218947 or GitHub @ailiwood)');
+    'Purchase License — {#LicensePrice}',
+    DisclaimerText,
+    'HOW TO ACTIVATE: 1. Scan Alipay QR code -> 2. Pay {#LicensePrice} -> ' +
+    '3. Contact dev (Douyin: @23230218947 / GitHub: @ailiwood) for license key -> ' +
+    '4. Enter key below to unlock installation.');
 
+  // Display Alipay QR code image on the page
+  QrImage := TBitmapImage.Create(WizardForm);
+  QrImage.Parent := LicensePage.Surface;
+  QrImage.Left := ScaleX(16);
+  QrImage.Top := ScaleY(16);
+  QrImage.Width := ScaleX(200);
+  QrImage.Height := ScaleY(200);
+  QrImage.Stretch := True;
+  QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
+
+  // Push the input field down below the QR image
   LicensePage.Add('License Key (format: QS-XXXX-XXXX-XXXX-XXXX):', False);
+  LicensePage.Values[0] := '';
   LicensePage.OnNextButtonClick := @OnLicensePageNext;
   LicensePage.OnShouldSkipPage := @OnSerialPageShouldSkip;
 end;
