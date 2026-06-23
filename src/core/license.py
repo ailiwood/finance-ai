@@ -162,9 +162,30 @@ def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") 
         License key string in QS-XXXX-XXXX-... format
     """
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    import sys as _sys
 
-    # Load private key
-    priv_bytes = Path("quantsage_private.key").read_bytes()
+    # Load private key — search multiple locations
+    _key_path = None
+    _search_paths = [
+        Path("quantsage_private.key"),                          # CWD
+        Path(__file__).resolve().parent.parent.parent / "quantsage_private.key",  # project root (from src/core/)
+        Path(_sys.executable).parent / "quantsage_private.key",  # next to .exe
+    ]
+    for _p in _search_paths:
+        if _p.exists():
+            _key_path = _p
+            break
+
+    if _key_path is None:
+        raise FileNotFoundError(
+            "找不到 quantsage_private.key。\n"
+            "请将私钥文件放在以下任一位置：\n"
+            f"  - 当前目录: {Path.cwd()}\n"
+            f"  - 项目根目录: {Path(__file__).resolve().parent.parent.parent}\n"
+            f"  - Keygen.exe 同目录: {Path(_sys.executable).parent}"
+        )
+
+    priv_bytes = _key_path.read_bytes()
     priv = Ed25519PrivateKey.from_private_bytes(priv_bytes)
 
     payload = {

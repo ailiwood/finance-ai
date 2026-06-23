@@ -1,25 +1,65 @@
 """QuantSage License Key Generator — GUI for developer use.
 
 Ed25519-signed, device-bound license keys.
-Requires quantsage_private.key in the project root.
+Requires quantsage_private.key in the same directory or project root.
 
-Usage: python scripts/keygen_gui.py
+Self-contained — no imports from src/ needed. Works as .exe or .py.
 """
-
-import sys
-import os
-from datetime import date, timedelta
-from pathlib import Path
-
-# Ensure project root is on path
-_project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_project_root))
-os.chdir(str(_project_root))
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import date, timedelta
+from pathlib import Path
+import json
+import base64
+import sys
 
-from src.core.license import generate_key
+
+# ═══════════════════════════════════════════════════════════════
+# Inline key generation (self-contained, no src/ dependency)
+# ═══════════════════════════════════════════════════════════════
+
+def _find_private_key() -> Path:
+    """Find quantsage_private.key in common locations."""
+    candidates = [
+        Path("quantsage_private.key"),                              # CWD
+        Path(__file__).resolve().parent.parent / "quantsage_private.key",  # project root
+        Path(sys.executable).parent / "quantsage_private.key",      # next to .exe
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "找不到 quantsage_private.key。\n\n"
+        "请将私钥文件放在以下任一位置：\n"
+        f"  1. 当前目录: {Path.cwd()}\n"
+        f"  2. 项目根目录: {Path(__file__).resolve().parent.parent}\n"
+        f"  3. Keygen.exe 同目录: {Path(sys.executable).parent}"
+    )
+
+
+def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") -> str:
+    """Generate an Ed25519-signed license key."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key_path = _find_private_key()
+    priv = Ed25519PrivateKey.from_private_bytes(key_path.read_bytes())
+
+    payload = {"device": device_code[:16], "exp": exp, "level": level}
+    payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    signature = priv.sign(payload_bytes)
+
+    # Encode: 2-byte length prefix + payload + signature → base32hex → groups of 4
+    plen = len(payload_bytes).to_bytes(2, "big")
+    combined = plen + payload_bytes + signature
+    b32 = base64.b32hexencode(combined).decode("ascii").rstrip("=")
+    groups = [b32[i:i+4] for i in range(0, len(b32), 4)]
+    return "QS-" + "-".join(groups)
+
+
+# ═══════════════════════════════════════════════════════════════
+# GUI
+# ═══════════════════════════════════════════════════════════════
 
 
 class KeygenApp:
