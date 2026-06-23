@@ -35,7 +35,8 @@ try:
         f"python={_sys.executable}\n"
         f"root={_PROJECT_ROOT}\n"
     )
-except Exception:
+except Exception as _e:
+    # Non-critical: marker file is for debugging only
     pass
 
 # ── Monitoring: unified logger + unhandled exception hook ──
@@ -219,6 +220,7 @@ p, li, span, div { color: #d1d5db; font-family: 'Segoe UI', 'Microsoft YaHei', s
 _COPYRIGHT_HTML = """
 <div class="quantsage-copyright">
 本软件由 <strong>ailiwood</strong> 开发 |
+<a href="https://github.com/ailiwood" target="_blank">GitHub</a> |
 抖音号: 23230218947
 </div>
 """
@@ -275,51 +277,54 @@ def main() -> None:
         _tt = _cfg.get("tushare_token", "")
         if _tt and not _tt.startswith("your_"):
             _os.environ["TUSHARE_TOKEN"] = _tt
-    except Exception:
-        pass
+    except Exception as _e:
+        _log.debug("Pre-load Tushare token failed (non-critical): %s", _e)
 
     # Inject global CSS + auto-reconnect JavaScript
     st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
 
-    # Auto-reconnect on WebSocket disconnect (long analyses can trigger timeout)
+    # Gentle health check — does NOT auto-reload (would interrupt running analysis).
+    # The backend thread + mailbox architecture ensures results survive WebSocket drops.
+    # User can manually refresh after analysis completes.
     reconnect_js = """
     <script>
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT = 30;
+    let connectionLost = false;
+    let healthCheckId = null;
 
-    function tryReconnect() {
-        if (reconnectAttempts >= MAX_RECONNECT) {
-            console.log('[QuantSage] Max reconnect attempts reached. Please refresh manually.');
-            return;
-        }
-        reconnectAttempts++;
+    function checkHealth() {
         fetch(window.location.href, {method: 'HEAD'})
             .then(r => {
-                if (r.ok) {
-                    console.log('[QuantSage] Server available. Reloading...');
-                    window.location.reload();
-                } else {
-                    setTimeout(tryReconnect, 3000);
+                if (connectionLost && r.ok) {
+                    console.log('[QuantSage] Server is back. Analysis results are safe — you may refresh when ready.');
+                    // Show a subtle banner instead of auto-reloading
+                    let banner = document.getElementById('qs-reconnect-banner');
+                    if (banner) banner.style.display = 'block';
                 }
+                connectionLost = false;
             })
-            .catch(() => setTimeout(tryReconnect, 3000));
+            .catch(() => {
+                connectionLost = true;
+                console.log('[QuantSage] Server unreachable. Analysis continues in background.');
+            });
     }
 
-    // Listen for WebSocket errors (Streamlit uses WebSocket for state sync)
+    // Poll server health every 30s — never auto-reload
+    healthCheckId = setInterval(function() {
+        if (document.hidden) return;
+        checkHealth();
+    }, 30000);
+
+    // Detect WebSocket drops without auto-reloading
     window.addEventListener('error', function(e) {
-        if (e.target && (e.target instanceof WebSocket || e.message?.includes('WebSocket'))) {
-            console.log('[QuantSage] WebSocket error detected. Will attempt reconnect...');
-            setTimeout(tryReconnect, 2000);
+        if (e.target && (e.target instanceof WebSocket || (e.message && e.message.includes('WebSocket')))) {
+            connectionLost = true;
+            console.log('[QuantSage] WebSocket disconnected. Analysis continues in background.');
         }
     });
-
-    // Also poll: if page becomes unresponsive, check server
-    setInterval(function() {
-        if (document.hidden) return;
-        fetch(window.location.href, {method: 'HEAD'})
-            .catch(() => setTimeout(tryReconnect, 2000));
-    }, 30000);
     </script>
+    <div id="qs-reconnect-banner" style="display:none;background:#1a2236;border:1px solid #22d3ee;color:#e8eaed;padding:10px 16px;margin:8px 0;border-radius:6px;text-align:center;font-size:0.9rem">
+    ⚡ 服务器已恢复连接。分析结果不受影响，你可以手动刷新页面查看最新状态。
+    </div>
     """
     st.markdown(reconnect_js, unsafe_allow_html=True)
 

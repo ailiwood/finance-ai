@@ -70,6 +70,24 @@ var
   PurchasePage: TInputQueryWizardPage;
   QrImage: TBitmapImage;
   SerialValid: Boolean;
+  DeviceCode: String;
+
+// ── Device fingerprint (simple hash of MachineGuid) ──
+function GetDeviceCode: String;
+var
+  Guid: String;
+  I, Sum: Integer;
+begin
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Cryptography', 'MachineGuid', Guid) then
+  begin
+    Sum := 0;
+    for I := 1 to Length(Guid) do
+      Sum := (Sum * 31 + Ord(Guid[I])) and $FFFFFFFF;
+    Result := Uppercase(Format('%.8x', [Sum]));
+  end
+  else
+    Result := 'UNKNOWN';
+end;
 
 // ── License key validation ──
 function ValidateLicenseKey(Key: String): Boolean;
@@ -95,6 +113,18 @@ begin
   ExpectedCS := (P1Val + P2Val + 24221) mod 65536;
   ExpectedInv := 65535 - ExpectedCS;
   Result := (CSVal = ExpectedCS) and (InvVal = ExpectedInv);
+end;
+
+// ── Save license info for runtime device-binding check ──
+procedure SaveLicenseInfo(Key: String);
+var
+  LicensePath: String;
+  LicenseJson: String;
+begin
+  LicensePath := ExpandConstant('{localappdata}\QuantSage\license.json');
+  LicenseJson := '{ "key": "' + Key + '", "device_code": "' + DeviceCode + '" }';
+  ForceDirectories(ExpandConstant('{localappdata}\QuantSage'));
+  SaveStringToFile(LicensePath, LicenseJson, False);
 end;
 
 // ── Agreement page: force both checkboxes ──
@@ -135,7 +165,11 @@ begin
     Result := False;
   end
   else
+  begin
+    // Save license info for runtime device-binding validation
+    SaveLicenseInfo(InputKey);
     Result := True;
+  end;
 end;
 
 function OnPurchaseSkip(Sender: TWizardPage): Boolean;
@@ -149,6 +183,9 @@ var
   FeaturesText, AgreementText: String;
 begin
   WizardForm.Caption := 'QuantSage v{#AppVersion} 安装向导';
+
+  // Compute device code early (used on Purchase page)
+  DeviceCode := GetDeviceCode;
 
   ExtractTemporaryFile('pay_qr.bmp');
 
@@ -255,7 +292,10 @@ begin
   PurchasePage := CreateInputQueryPage(AgreementPage.ID,
     '购买许可证 — {#LicensePrice}',
     '请用支付宝扫描下方二维码支付 {#LicensePrice}，' +
-    '然后联系开发者（抖音：23230218947）获取许可证密钥。' + #13#10 +
+    '然后联系开发者（抖音：23230218947）并提供您的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
+    #13#10 +
+    '您的设备码：' + DeviceCode + #13#10 +
+    '（此码与您的硬件绑定，密钥仅在此设备上有效。）' + #13#10 +
     '输入正确的密钥后即可解锁安装。',
     '');
 

@@ -580,7 +580,9 @@ def show_home() -> None:
                 reports.get("final_trade_decision") or reports.get("judge_decision", "")))
             parts.append("")
 
-        # ── Kronos K-line Prediction ──
+        # ── Kronos K-line Prediction (runs BEFORE conclusion so agents' output
+        #     can be cross-referenced with the model prediction) ──
+        _kronos_pred = None
         try:
             from src.plugins.kronos_service.model_engine import get_engine
             from src.data.market_data import get_kline as _kline_kronos
@@ -595,30 +597,42 @@ def show_home() -> None:
                         "low": float(_r["low"]), "close": float(_r["close"]),
                         "volume": int(_r.get("volume", 0)),
                     })
-                _pred = _engine.predict(_ohlcv, horizon_days=10)
+                _kronos_pred = _engine.predict(_ohlcv, horizon_days=10)
                 parts.append("---")
-                parts.append("## Kronos 深度学习 K 线预测")
-                parts.append(f"**预测引擎**: {_pred['method']}")
-                parts.append(f"**当前价格**: ¥{_pred['current_price']:,.2f}")
-                parts.append(f"**预测方向**: {'看涨 📈' if _pred['direction']=='up' else '看跌 📉' if _pred['direction']=='down' else '中性'}")
-                parts.append(f"**目标价格 (10日)**: ¥{_pred['target_price']:,.2f}")
-                parts.append(f"**预测区间**: ¥{_pred['lower_bound']:,.2f} ~ ¥{_pred['upper_bound']:,.2f}")
-                parts.append(f"**置信度**: {_pred['confidence']:.0%}")
-                parts.append(f"*{_pred['disclaimer']}*")
+                parts.append("## 🔮 Kronos 深度学习 K 线预测")
+                _engine_label = "深度学习模型" if "Kronos-base" in str(_kronos_pred.get("method", "")) else "统计模型(降级)"
+                parts.append(f"**预测引擎**: {_kronos_pred['method']} ({_engine_label})")
+                parts.append(f"**当前价格**: ¥{_kronos_pred['current_price']:,.2f}")
+                _k_dir = "看涨 📈" if _kronos_pred['direction'] == 'up' else ("看跌 📉" if _kronos_pred['direction'] == 'down' else "中性")
+                parts.append(f"**预测方向**: {_k_dir}")
+                parts.append(f"**目标价格 (10日)**: ¥{_kronos_pred['target_price']:,.2f}")
+                parts.append(f"**预测区间**: ¥{_kronos_pred['lower_bound']:,.2f} ~ ¥{_kronos_pred['upper_bound']:,.2f}")
+                parts.append(f"**置信度**: {_kronos_pred['confidence']:.0%}")
+                parts.append(f"*{_kronos_pred['disclaimer']}*")
                 parts.append("")
         except Exception:
-            pass
+            _kronos_pred = None
 
-        # Conclusion
+        # Conclusion (cross-references Kronos prediction when available)
         parts.append("---")
         parts.append("## 综合结论")
-        parts.append(f"**最终观点**: {direction}")
-        parts.append(f"**置信度**: {confidence:.0%}")
-        parts.append(f"**风险评分**: {risk:.1%}")
+        parts.append(f"**AI 多智能体观点**: {direction}（置信度 {confidence:.0%}，风险评分 {risk:.1%}）")
         if tp:
-            parts.append(f"**参考价位**: ¥{tp:,.2f}")
+            parts.append(f"**AI 参考价位**: ¥{tp:,.2f}")
+        # Cross-reference with Kronos if available
+        if _kronos_pred:
+            _k_match = (
+                (_kronos_pred['direction'] == 'up' and direction == '看多') or
+                (_kronos_pred['direction'] == 'down' and direction == '看空')
+            )
+            _kronos_ref = (
+                f"**Kronos 模型预测**: {_k_dir}，目标价 ¥{_kronos_pred['target_price']:,.2f}，"
+                f"与AI多智能体结论{'一致 ✅' if _k_match else '存在分歧 ⚠️'}"
+            )
+            parts.append(_kronos_ref)
+            parts.append(f"*Kronos 为概率性预测，非确定性结论。{'当AI与模型方向一致时可信度更高。' if _k_match else '分歧不代表错误，需结合更多信息综合判断。'}*")
         if reasoning:
-            parts.append(f"**综合推理**: {reasoning}")
+            parts.append(f"**AI 综合推理**: {reasoning}")
         parts.append("")
         parts.append("---")
         parts.append("> 本报告由 QuantSage 自动生成，仅供参考研究，不构成任何投资建议，盈亏自负。")

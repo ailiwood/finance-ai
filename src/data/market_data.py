@@ -26,10 +26,34 @@ _source_used: str = ""
 _adjust_used: str = ""
 
 # ── In-memory K-line cache (prevents native library crashes on re-login) ──
-# Key: (symbol, adjust), Value: full DataFrame with max lookback
-# On the second+ call, we slice from cache instead of reconnecting to BaoStock.
+# Key: (symbol, adjust, trade_date), Value: (timestamp, DataFrame)
+# TTL: 30 minutes — financial data must not go stale
 # This also fixes the test machine crash where bs.login() segfaults on second call.
 _kline_cache: dict = {}
+_KLINE_CACHE_TTL = 30 * 60  # seconds
+
+# ── Fundamentals cache ──
+# Key: symbol, Value: (timestamp, result_string)
+_fundamentals_cache: dict = {}
+_FUNDAMENTALS_CACHE_TTL = 30 * 60  # seconds
+
+
+def clear_kline_cache(symbol: str = "") -> None:
+    """Clear kline cache for a symbol, or all if empty. For 'force refresh' button."""
+    global _kline_cache
+    if symbol:
+        _kline_cache = {k: v for k, v in _kline_cache.items() if k[0] != symbol}
+    else:
+        _kline_cache.clear()
+
+
+def clear_fundamentals_cache(symbol: str = "") -> None:
+    """Clear fundamentals cache for a symbol, or all if empty."""
+    global _fundamentals_cache
+    if symbol:
+        _fundamentals_cache.pop(symbol, None)
+    else:
+        _fundamentals_cache.clear()
 
 
 def _log(msg: str) -> None:
@@ -288,21 +312,26 @@ def get_kline(
     global _source_used, _adjust_used
     _source_used = _adjust_used = ""
 
-    # ── Cache check: avoid reconnecting to native libs (prevents segfault on re-login) ──
-    _cache_key = (symbol, adjust)
+    # ── Cache check: TTL + date key, prevents stale prices + native re-login crash ──
+    _today = datetime.now().strftime("%Y%m%d")
+    _cache_key = (symbol, adjust, _today)
     if _cache_key in _kline_cache:
-        _cached = _kline_cache[_cache_key]
-        _log(f"get_kline({symbol}) → 缓存命中 ({len(_cached)}行)")
-        from src.monitor import log_data_shape
-        log_data_shape(f"get_kline({symbol}) cached", _cached)
-        # Return slice with requested lookback
-        _cutoff = pd.Timestamp.now() - pd.Timedelta(days=lookback_days + 10)
-        _sliced = _cached[_cached["date"] >= _cutoff].copy()
-        if len(_sliced) >= 3:
-            _sliced.attrs = dict(_cached.attrs)
-            return _sliced
-        # If slice is too small, return full cache
-        return _cached.copy()
+        _ts, _cached = _kline_cache[_cache_key]
+        _age = time.time() - _ts
+        if _age < _KLINE_CACHE_TTL:
+            _log(f"get_kline({symbol}) → 缓存命中 ({len(_cached)}行, {_age:.0f}s前)")
+            from src.monitor import log_data_shape
+            log_data_shape(f"get_kline({symbol}) cached", _cached)
+            # Return slice with requested lookback
+            _cutoff = pd.Timestamp.now() - pd.Timedelta(days=lookback_days + 10)
+            _sliced = _cached[_cached["date"] >= _cutoff].copy()
+            if len(_sliced) >= 3:
+                _sliced.attrs = dict(_cached.attrs)
+                return _sliced
+            return _cached.copy()
+        else:
+            _log(f"get_kline({symbol}) → 缓存过期({_age:.0f}s > {_KLINE_CACHE_TTL}s), 重新获取")
+            _kline_cache.pop(_cache_key, None)
 
     end = datetime.now()
     start = end - timedelta(days=lookback_days + 10)
@@ -330,8 +359,8 @@ def get_kline(
             # Attach metadata so downstream can display source/adjust info
             df.attrs["source"] = _source_used or "unknown"
             df.attrs["adjust"] = _adjust_used or "qfq"
-            # Store in cache for subsequent calls (prevents native re-login crashes)
-            _kline_cache[(symbol, adjust)] = df.copy()
+            # Store in cache for subsequent calls (TTL + date key)
+            _kline_cache[_cache_key] = (time.time(), df.copy())
             # Remove legacy global state to prevent stale reads
             _source_used, _adjust_used = "", ""
             # ── Checkpoint: get_kline return ──
@@ -506,8 +535,38 @@ def fetch_china_news(symbol: str, max_news: int = 10) -> str:
 # Free fundamentals fetcher (BaoStock query_stock_basic)
 # ═══════════════════════════════════════════════════════════════
 
-# ── Fundamentals cache (prevents native re-login crash) ──
-_fundamentals_cache: dict = {}
+def _fetch_akshare_financials(symbol: str) -> dict:
+    """Try AKShare free financial indicators (PE/PB/ROE/EPS).
+
+    Uses stock_a_indicator_lg which provides the latest financial ratios.
+    Returns empty dict on any failure — never fabricates.
+    """
+    try:
+        import akshare as ak
+        df = ak.stock_a_indicator_lg(symbol=symbol)
+        if df is None or df.empty:
+            return {}
+        # Get the most recent row with valid data
+        latest = df.iloc[-1]
+        result = {}
+        # Map common column names to our keys
+        for ak_col, our_key in [
+            ("pe", "pe"), ("pe_ttm", "pe"),
+            ("pb", "pb"), ("pb_mrq", "pb"),
+            ("roe", "roe"), ("roe_ttm", "roe"),
+            ("eps", "eps"), ("basic_eps", "eps"),
+        ]:
+            if ak_col in df.columns:
+                val = latest[ak_col]
+                if pd.notna(val) and float(val) != 0:
+                    result[our_key] = f"{float(val):.2f}"
+                    # Don't overwrite if already set
+                    if our_key not in result:
+                        result[our_key] = f"{float(val):.2f}"
+        return result
+    except Exception:
+        return {}
+
 
 def get_fundamentals(symbol: str) -> str:
     """Fetch A-share fundamental data via BaoStock (free, no registration).
@@ -516,9 +575,13 @@ def get_fundamentals(symbol: str) -> str:
     Financial indicators (PE/PB/ROE) require Tushare for complete data.
     Never fabricates — missing fields are clearly marked.
     """
-    # Check cache first (prevents bs.login() segfault on second call)
+    # Check cache with TTL (prevents bs.login() segfault + ensures fresh data)
     if symbol in _fundamentals_cache:
-        return _fundamentals_cache[symbol]
+        _ts, _result = _fundamentals_cache[symbol]
+        if time.time() - _ts < _FUNDAMENTALS_CACHE_TTL:
+            return _result
+        else:
+            _fundamentals_cache.pop(symbol, None)
 
     try:
         import baostock as bs
@@ -554,8 +617,36 @@ def get_fundamentals(symbol: str) -> str:
         if not basic_info.get("name"):
             return ""
 
+        # 3) AKShare financial indicators (PE/PB/ROE/EPS — free, no token needed)
+        fin_data = _fetch_akshare_financials(symbol)
+
+        # Build financial indicator rows
+        fin_rows = []
+        fin_source = ""
+        if fin_data:
+            fin_source = " (来源: AKShare, 免费接口)"
+            pe_val = fin_data.get("pe", "")
+            pb_val = fin_data.get("pb", "")
+            roe_val = fin_data.get("roe", "")
+            eps_val = fin_data.get("eps", "")
+            fin_rows = [
+                f"| PE (市盈率) | {pe_val if pe_val else '⚠️ 暂不可用'} | {'' if pe_val else 'AKShare接口未返回'} |",
+                f"| PB (市净率) | {pb_val if pb_val else '⚠️ 暂不可用'} | {'' if pb_val else 'AKShare接口未返回'} |",
+                f"| ROE | {roe_val if roe_val else '⚠️ 暂不可用'} | {'' if roe_val else 'AKShare接口未返回'} |",
+                f"| EPS | {eps_val if eps_val else '⚠️ 暂不可用'} | {'' if eps_val else 'AKShare接口未返回'} |",
+                "| 股息率 | ⚠️ 暂不可用 | 需 Tushare Token (tushare.pro 免费注册) |",
+            ]
+        else:
+            fin_rows = [
+                "| PE (市盈率) | ⚠️ 暂不可用 | AKShare/BaoStock免费接口均未返回 |",
+                "| PB (市净率) | ⚠️ 暂不可用 | 同上 |",
+                "| ROE | ⚠️ 暂不可用 | 同上 |",
+                "| EPS | ⚠️ 暂不可用 | 同上 |",
+                "| 股息率 | ⚠️ 暂不可用 | 需 Tushare Token |",
+            ]
+
         lines = [
-            f"## {symbol} 基本面信息 (来源: BaoStock, 免费接口)",
+            f"## {symbol} 基本面信息 (来源: BaoStock, 免费接口){fin_source}",
             "",
             "### 公司基本信息",
             f"- 股票名称: {basic_info.get('name', '未知')}",
@@ -565,18 +656,14 @@ def get_fundamentals(symbol: str) -> str:
             "### 财务指标",
             "| 指标 | 数值 | 说明 |",
             "|------|------|------|",
-            "| PE (市盈率) | ⚠️ 暂不可用 | 需 Tushare Token (tushare.pro 免费注册) |",
-            "| PB (市净率) | ⚠️ 暂不可用 | 同上 |",
-            "| ROE | ⚠️ 暂不可用 | 同上 |",
-            "| EPS | ⚠️ 暂不可用 | 同上 |",
-            "| 股息率 | ⚠️ 暂不可用 | 同上 |",
+        ] + fin_rows + [
             "",
-            "*BaoStock 免费接口仅提供基本信息。PE/PB/ROE/EPS 等财务指标需配置 Tushare。*",
-            "*本报告不编造任何数据。所有标注'暂不可用'的指标均为真实数据缺失。*",
+            "*BaoStock 免费接口提供基本信息，AKShare 补充 PE/PB/ROE/EPS。*",
+            "*本报告不编造任何数据。标注'暂不可用'的指标为真实数据缺失。*",
         ]
         result = "\n".join(lines)
         # Cache to avoid BaoStock re-login crashes on subsequent calls
-        _fundamentals_cache[symbol] = result
+        _fundamentals_cache[symbol] = (time.time(), result)
         return result
     except ImportError:
         return ""

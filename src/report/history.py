@@ -4,6 +4,8 @@ Saves each report as:
   ~/.quantsage/reports/YYYY-MM-DD_600519.txt (plain text)
 Plus an index file:
   ~/.quantsage/reports/index.json (metadata only, no report content)
+
+Limits: 100 most recent reports in index; old .txt files auto-cleaned.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Optional
 
 REPORTS_DIR = Path.home() / ".quantsage" / "reports"
 INDEX_FILE = REPORTS_DIR / "index.json"
+MAX_REPORTS = 100  # Keep at most this many reports
 
 
 def save_report(symbol: str, stock_name: str, market: str, report: str,
@@ -41,7 +44,7 @@ def save_report(symbol: str, stock_name: str, market: str, report: str,
 
 def _update_index(symbol: str, stock_name: str, market: str,
                   decision: dict, filepath: str, trace_id: str) -> None:
-    """Append metadata-only entry to index."""
+    """Append metadata-only entry to index. Clean up old .txt files beyond MAX_REPORTS."""
     try:
         if INDEX_FILE.exists():
             index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
@@ -60,7 +63,18 @@ def _update_index(symbol: str, stock_name: str, market: str,
         "file": filepath,
         "trace_id": trace_id,
     })
-    index = index[:100]
+
+    # Trim and clean up old files
+    if len(index) > MAX_REPORTS:
+        for entry in index[MAX_REPORTS:]:
+            old_file = Path(entry.get("file", ""))
+            if old_file.exists():
+                try:
+                    old_file.unlink()
+                except Exception:
+                    pass
+        index = index[:MAX_REPORTS]
+
     INDEX_FILE.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
