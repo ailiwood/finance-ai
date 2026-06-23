@@ -534,8 +534,7 @@ def show_home() -> None:
 
     # ── Results display ──
     if st.session_state.get("analysis_result") and not st.session_state.get("analysis_running"):
-        try:
-            result = st.session_state.analysis_result
+        result = st.session_state.analysis_result
         decision = result.get("decision", {})
         reports = result.get("agent_reports", {})
 
@@ -693,16 +692,6 @@ def show_home() -> None:
             if st.button("清除结果", key="clear_result", use_container_width=True):
                 st.session_state.analysis_result = None
                 st.rerun()
-        except Exception as _render_err:
-            st.error(f"报告渲染异常: {str(_render_err)[:300]}")
-            st.caption("分析已完成，但报告显示出现问题。请尝试下载 Markdown 或 PDF 查看完整内容。")
-            # Still offer downloads from raw data
-            try:
-                _raw_report = "\n\n".join(str(v) for v in reports.values() if v)
-                st.download_button("下载原始报告 (Markdown)", data=_raw_report,
-                    file_name=f"{safe_symbol}_原始报告.md", mime="text/markdown", use_container_width=True)
-            except Exception:
-                pass
 
     st.markdown("</div>", unsafe_allow_html=True)
 
