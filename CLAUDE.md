@@ -116,7 +116,7 @@ quantsage/
 - [x] **M7 方案 B**（Windows 安装包 + 商用化）← *进行中 (2026-06-21)*
 
 **阶段一完成！** 仓库: https://github.com/ailiwood/finance-ai
-**开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.11+cu128, RTX 5070 Ti)
+**开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.12.1+cpu, RTX 5070 Ti)
 
 ### M7 进度（2026-06-23 更新）
 
@@ -139,21 +139,21 @@ quantsage/
 - [x] 全链路日志监控模块: trace_id + 双输出 + 数据形态埋点 + 诊断导出
 - [x] 数据桥接: 4个TA-CN工具→get_kline()+format() 绕过断裂管线B
 - [x] 安装器付费流程: 功能介绍→协议强制勾选→扫码付款→License Key→安装
-- [x] License Key 离线验证(16位校验和)
+- [x] License Key Ed25519非对称签名(私钥签名/公钥验签/设备绑定/keygen GUI)
 - [x] 简体中文安装器
 - [x] 报告历史存档(~/.quantsage/reports/日期-代码.txt)
 - [x] 金融知识学习中心(4标签页)
-- [x] Kronos预测嵌入报告(引擎名/方向/目标价/区间/置信度)
+- [x] Kronos完整集成(CPU torch打包+406MB权重+Agent辩论前注入+结论交叉引用)
 - [x] PyInstaller + Inno Setup 完整构建
 - [ ] 无显卡电脑端到端验证
 - [ ] 分析进度实时反馈+取消按钮
 
 ### M7 架构要点
-- **打包工具**: PyInstaller (GPL + Bootloader Exception)，排除 torch/transformers 等 GPU 重型包
+- **打包工具**: PyInstaller (GPL + Bootloader Exception)，torch CPU版+transformers全部打进exe(~1.4GB)
 - **GPU 方案**: CPU版torch开箱即用；nvidia-smi检测→UI引导升级CUDA版；失败回退CPU版
 - **数据桥接**: agent_utils.py 工具层拦截TA-CN A股请求，用get_kline()+format()返回真实数据
 - **Kronos**: vendored代码+HuggingFace权重(NeoQuasar/Kronos-base)，强制base变体，406MB内置
-- **许可**: 离线16位校验和，Inno Setup Pascal+Python keygen一致
+- **许可**: Ed25519非对称签名,私钥(quantsage_private.key)开发者持有,公钥硬编码客户端,keygen_gui.py一键生成
 - **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
 - **打包路径**: spec中ta_cn_dir必须指向 spec_dir/TradingAgents-CN（不是os.path.dirname(spec_dir)）
 
