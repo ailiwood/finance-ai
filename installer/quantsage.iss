@@ -21,7 +21,7 @@ DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 OutputDir=..\dist\installer
-OutputBaseFilename=QuantSage_Setup_v{#AppVersion}
+OutputBaseFilename=QuantSage_Setup_v{#AppVersion}_new
 SetupIconFile=..\src\ui\assets\logo.ico
 WizardImageFile=assets\wizard.bmp
 WizardSmallImageFile=assets\wizard_small.bmp
@@ -147,8 +147,18 @@ begin
   InputKey := PurchasePage.Values[0];
   if InputKey = '' then
   begin
-    MsgBox('请输入许可证密钥。', mbError, MB_OK);
-    Result := False;
+    // Allow skip — install in trial mode, activate later from the app
+    if MsgBox('您尚未输入许可证密钥。' + #13#13 +
+              '可以跳过此步骤先完成安装，然后打开软件首页查看设备码，' +
+              '联系开发者购买后即可激活。' + #13#13 +
+              '是否跳过激活，先完成安装？',
+              mbConfirmation, MB_YESNO) = IDYES then
+    begin
+      SerialValid := False;  // Not activated, but allow install
+      Result := True;
+    end
+    else
+      Result := False;
     Exit;
   end;
   SerialValid := ValidateLicenseKey(InputKey);
@@ -289,8 +299,9 @@ begin
     '然后联系开发者（抖音：23230218947）并提供您的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
     '' + #13#10 +
     '您的设备码：' + DeviceCode + #13#10 +
-    '（此码与您的硬件绑定，密钥仅在此设备上有效。）' + #13#10 +
-    '输入正确的密钥后即可解锁安装。',
+    '（此码与您的硬件绑定，请发送给开发者以获取密钥。）' + #13#10 +
+    '输入密钥后点击下一步完成激活；' + #13#10 +
+    '尚无密钥可留空，点击下一步跳过（安装后从软件首页获取设备码）。',
     '');
 
   // QR code — half size, centered horizontally, positioned below text
@@ -320,8 +331,15 @@ begin
   if CurPageID = wpFinished then
   begin
     WizardForm.FinishedHeadingLabel.Caption := '安装完成！';
-    WizardForm.FinishedLabel.Caption :=
-      'QuantSage 已成功安装并激活。' + #13#13 +
-      '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。';
+    if SerialValid then
+      WizardForm.FinishedLabel.Caption :=
+        'QuantSage 已成功安装并激活。' + #13#13 +
+        '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。'
+    else
+      WizardForm.FinishedLabel.Caption :=
+        'QuantSage 已成功安装（试用模式）。' + #13#13 +
+        '打开软件后首页会显示您的设备码。' + #13#10 +
+        '联系开发者（抖音：23230218947）购买许可证密钥后即可激活。' + #13#13 +
+        '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。';
   end;
 end;

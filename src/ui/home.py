@@ -266,6 +266,14 @@ def show_home() -> None:
     st.markdown('<h1 class="home-title">QuantSage</h1>', unsafe_allow_html=True)
     st.markdown('<p class="home-subtitle">多智能体股票研究辅助平台</p>', unsafe_allow_html=True)
 
+    # ── Device code (always visible, needed for license activation) ──
+    try:
+        from src.deployment.license import get_device_fingerprint
+        _dev_code = get_device_fingerprint()
+        st.info(f"📟 本机设备码：**{_dev_code}**（购买/激活许可证时需提供此码）")
+    except Exception:
+        pass
+
     config = load_config()
     key_status = get_key_status()
 
