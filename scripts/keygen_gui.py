@@ -21,40 +21,48 @@ import sys
 
 def _find_private_key() -> Path:
     """Find quantsage_private.key in common locations."""
+    exe_dir = Path(sys.executable).parent.resolve() if getattr(sys, 'frozen', False) else Path.cwd()
     candidates = [
         Path("quantsage_private.key"),                              # CWD
-        Path(__file__).resolve().parent.parent / "quantsage_private.key",  # project root
-        Path(sys.executable).parent / "quantsage_private.key",      # next to .exe
+        exe_dir / "quantsage_private.key",                          # next to .exe / python
+        exe_dir.parent / "quantsage_private.key",                   # one level up from .exe
+        Path(__file__).resolve().parent.parent / "quantsage_private.key",  # project root (dev mode)
     ]
+    # Also check _MEIPASS for PyInstaller onedir builds
+    if hasattr(sys, '_MEIPASS'):
+        candidates.append(Path(sys._MEIPASS) / "quantsage_private.key")
+        candidates.append(Path(sys._MEIPASS).parent / "quantsage_private.key")
+
     for p in candidates:
         if p.exists():
             return p
     raise FileNotFoundError(
         "找不到 quantsage_private.key。\n\n"
-        "请将私钥文件放在以下任一位置：\n"
-        f"  1. 当前目录: {Path.cwd()}\n"
+        "请将私钥文件放在以下任一位置后重试：\n"
+        f"  1. Keygen.exe 所在目录: {exe_dir}\n"
         f"  2. 项目根目录: {Path(__file__).resolve().parent.parent}\n"
-        f"  3. Keygen.exe 同目录: {Path(sys.executable).parent}"
+        f"  3. 当前工作目录: {Path.cwd()}"
     )
 
 
 def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") -> str:
-    """Generate an Ed25519-signed license key."""
+    """Generate an Ed25519-signed license key (compact base64url encoding)."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     key_path = _find_private_key()
     priv = Ed25519PrivateKey.from_private_bytes(key_path.read_bytes())
 
-    payload = {"device": device_code[:16], "exp": exp, "level": level}
+    # Use only 8 chars of device code (shorter key, still unique per device)
+    payload = {"d": device_code[:8], "exp": exp, "lv": level}
     payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = priv.sign(payload_bytes)
 
-    # Encode: 2-byte length prefix + payload + signature → base32hex → groups of 4
+    # Encode: 2-byte length prefix + payload + signature → base64url → groups of 4
     plen = len(payload_bytes).to_bytes(2, "big")
     combined = plen + payload_bytes + signature
-    b32 = base64.b32hexencode(combined).decode("ascii").rstrip("=")
-    groups = [b32[i:i+4] for i in range(0, len(b32), 4)]
-    return "QS-" + "-".join(groups)
+    b64 = base64.urlsafe_b64encode(combined).decode("ascii").rstrip("=")
+    groups = [b64[i:i+4] for i in range(0, len(b64), 4)]
+    return "QS." + ".".join(groups)  # dot separator (base64url uses - and _)
 
 
 # ═══════════════════════════════════════════════════════════════

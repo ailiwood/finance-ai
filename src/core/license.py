@@ -28,29 +28,27 @@ def _get_pubkey() -> Ed25519PublicKey:
 # ── Encoding ──
 
 def _encode(payload: dict, signature: bytes) -> str:
-    """Encode payload + signature into QS-XXXX-XXXX-... readable format."""
+    """Encode payload + signature into QS-XXXX-XXXX-... (base64url, compact)."""
     payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     payload_bytes = payload_json.encode("utf-8")
-    # Prepend payload length (2 bytes, big-endian) so we can split on decode
     plen = len(payload_bytes).to_bytes(2, "big")
     combined = plen + payload_bytes + signature
-    b32 = base64.b32hexencode(combined).decode("ascii").rstrip("=")
-    groups = [b32[i:i+4] for i in range(0, len(b32), 4)]
-    return "QS-" + "-".join(groups)
+    b64 = base64.urlsafe_b64encode(combined).decode("ascii").rstrip("=")
+    groups = [b64[i:i+4] for i in range(0, len(b64), 4)]
+    return "QS." + ".".join(groups)  # dot separator — base64url uses - and _
 
 
 def _decode(key_str: str) -> tuple[dict, bytes]:
-    """Decode a license key back into (payload, signature)."""
-    key_str = key_str.strip().upper().replace(" ", "")
-    if key_str.startswith("QS-"):
+    """Decode a license key back into (payload, signature). Supports base64url."""
+    key_str = key_str.strip().replace(" ", "")
+    if key_str.upper().startswith("QS."):
         key_str = key_str[3:]
-    key_str = key_str.replace("-", "")
-    # Pad for base32hex decoding
-    pad = 8 - (len(key_str) % 8)
-    if pad < 8:
+    key_str = key_str.replace(".", "")  # dot is our group separator
+    # Pad for base64url decoding (multiple of 4)
+    pad = 4 - (len(key_str) % 4)
+    if pad < 4:
         key_str += "=" * pad
-    combined = base64.b32hexdecode(key_str)
-    # First 2 bytes = payload length
+    combined = base64.urlsafe_b64decode(key_str)
     plen = int.from_bytes(combined[:2], "big")
     payload_json = combined[2:2+plen].decode("utf-8")
     signature = combined[2+plen:]
@@ -72,13 +70,13 @@ def verify_license(key_str: str, device_code: str) -> dict:
     try:
         payload, signature = _decode(key_str)
         pub = _get_pubkey()
-        # Verify Ed25519 signature — this is what prevents forgery
+        # Verify Ed25519 signature
         payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         pub.verify(signature, payload_bytes)
 
-        # Device binding check
-        stored_device = payload.get("device", "")
-        if stored_device and stored_device != device_code[:16]:
+        # Device binding (field "d" = first 8 chars of device code)
+        stored_device = payload.get("d", "")
+        if stored_device and stored_device != device_code[:8]:
             return {"valid": False, "level": "", "exp": "", "reason": "密钥与本设备不匹配（设备码不同）"}
 
         # Expiry check
@@ -93,7 +91,7 @@ def verify_license(key_str: str, device_code: str) -> dict:
 
         return {
             "valid": True,
-            "level": payload.get("level", "pro"),
+            "level": payload.get("lv", "pro"),
             "exp": exp_str,
             "reason": "验证通过",
         }
@@ -189,9 +187,9 @@ def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") 
     priv = Ed25519PrivateKey.from_private_bytes(priv_bytes)
 
     payload = {
-        "device": device_code[:16],
+        "d": device_code[:8],   # short field names = shorter key
         "exp": exp,
-        "level": level,
+        "lv": level,
     }
     payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = priv.sign(payload_bytes)

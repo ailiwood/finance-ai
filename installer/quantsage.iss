@@ -95,22 +95,16 @@ var
   CleanKey: String;
   I: Integer;
 begin
-  CleanKey := Uppercase(Key);
+  // Keep original case for base64url (case-sensitive encoding)
   StringChangeEx(CleanKey, ' ', '', True);
-  StringChangeEx(CleanKey, '-', '', True);
-  // New Ed25519 format: QS-XXXX-XXXX-... (base32hex, variable length > 20 chars)
-  // Old format: QS-XXXX-YYYY-ZZZZ-WWWW (18 hex chars — backward compat)
-  if Copy(CleanKey, 1, 2) <> 'QS' then begin Result := False; Exit; end;
-  // Accept both old (18 chars) and new (>20 chars) format
-  if Length(CleanKey) >= 18 then
-  begin
-    // Check all chars are valid base32hex / hex
-    for I := 3 to Length(CleanKey) do
-      if not (((CleanKey[I] >= '0') and (CleanKey[I] <= '9')) or
-              ((CleanKey[I] >= 'A') and (CleanKey[I] <= 'V'))) then
-      begin Result := False; Exit; end;
-    Result := True;
-  end
+  StringChangeEx(CleanKey, '.', '', True);  // dot is group separator
+  StringChangeEx(CleanKey, '-', '', True);  // dash from old format / base64url
+  // New Ed25519 format: QS.XXXX.XXXX. ... (base64url, variable length > 16 chars)
+  if (Copy(CleanKey, 1, 2) <> 'QS') and (Copy(CleanKey, 1, 2) <> 'Qs') then
+    begin Result := False; Exit; end;
+  // Accept variable-length base64url key (A-Z, a-z, 0-9, -, _)
+  if Length(CleanKey) >= 16 then
+    Result := True
   else
     Result := False;
 end;
