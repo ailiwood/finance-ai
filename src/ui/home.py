@@ -362,6 +362,13 @@ def show_home() -> None:
                 st.caption(f"磁盘可用: {free_gb:.1f} GB")
             except Exception:
                 st.caption("磁盘: 检测不可用")
+            # Device code (for license activation)
+            try:
+                from src.deployment.license import get_device_fingerprint
+                _dc = get_device_fingerprint()
+                st.caption(f"设备码: {_dc}（购买/激活许可证时需提供此码）")
+            except Exception:
+                pass
 
     # ── GPU Upgrade Dialog ──
     if st.session_state.get("show_gpu_upgrade", False):
