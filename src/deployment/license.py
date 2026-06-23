@@ -16,12 +16,9 @@ from pathlib import Path
 def get_device_fingerprint() -> str:
     """Generate a stable device fingerprint (8 hex chars).
 
-    Uses Windows MachineGuid + MAC address, hashed with SHA-256.
-    Falls back gracefully on non-Windows or if detection fails.
+    Reads MachineGuid from Windows registry, strips dashes, takes first 8 chars.
+    Same algorithm as installer Pascal code — MUST stay in sync.
     """
-    parts = []
-
-    # 1) MachineGuid (Windows registry — stable across reboots)
     try:
         import winreg
         key = winreg.OpenKey(
@@ -30,24 +27,15 @@ def get_device_fingerprint() -> str:
         )
         guid, _ = winreg.QueryValueEx(key, "MachineGuid")
         winreg.CloseKey(key)
-        parts.append(str(guid))
+        # Same as installer: strip dashes, first 8 chars uppercase
+        code = str(guid).replace("-", "").upper()
+        return code[:8] if len(code) >= 8 else code
     except Exception:
-        pass
-
-    # 2) MAC address
-    try:
-        mac = uuid.getnode()
-        parts.append(f"{mac:012x}")
-    except Exception:
-        pass
-
-    # 3) Fallback: platform + hostname
-    if not parts:
+        # Fallback for non-Windows or registry access denied
         import platform
-        parts.append(platform.node() or "unknown")
-
-    combined = "|".join(parts)
-    return hashlib.sha256(combined.encode()).hexdigest()[:8].upper()
+        import hashlib
+        raw = platform.node() or "unknown"
+        return hashlib.sha256(raw.encode()).hexdigest()[:8].upper()
 
 
 def _device_code_int(device_code: str = "") -> int:

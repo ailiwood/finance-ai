@@ -39,7 +39,6 @@ Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignorev
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "assets\pay_qr.bmp"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy nocompression
-Source: "..\dist\qs_device_code\qs_device_code.exe"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy
 
 [Types]
 Name: "minimal"; Description: "标准安装"
@@ -73,32 +72,24 @@ var
   SerialValid: Boolean;
   DeviceCode: String;
 
-// ── Device fingerprint (runs bundled EXE, captures stdout to file) ──
+// ── Device fingerprint (reads MachineGuid from registry — same as Python app) ──
 function GetDeviceCode: String;
 var
-  TmpPath, ExePath, OutFile, CmdLine: String;
-  ResultCode: Integer;
-  Output: AnsiString;
+  Guid: String;
+  I: Integer;
 begin
-  TmpPath := ExpandConstant('{tmp}');
-  ExePath := TmpPath + '\qs_device_code.exe';
-  OutFile := TmpPath + '\_dc.txt';
-  // Run: qs_device_code.exe > _dc.txt
-  CmdLine := '/c ""' + ExePath + '" > "' + OutFile + '""';
-  if Exec('cmd.exe', CmdLine, TmpPath, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  Result := '';
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Cryptography', 'MachineGuid', Guid) then
   begin
-    if LoadStringFromFile(OutFile, Output) then
-    begin
-      Result := Trim(Output);
-      // Remove any non-hex chars (newlines, spaces)
-      StringChangeEx(Result, #13, '', True);
-      StringChangeEx(Result, #10, '', True);
-      StringChangeEx(Result, ' ', '', True);
-      if Length(Result) >= 8 then Exit;
-    end;
+    // Strip dashes and take first 8 chars (same logic as src/deployment/license.py)
+    StringChangeEx(Guid, '-', '', True);
+    if Length(Guid) >= 8 then
+      Result := Uppercase(Copy(Guid, 1, 8))
+    else
+      Result := Uppercase(Guid);
   end;
-  // Fallback
-  Result := 'UNKNOWN';
+  if Result = '' then
+    Result := 'UNKNOWN';
 end;
 
 // ── License key validation (format check only; Ed25519 verified at runtime) ──
@@ -201,8 +192,7 @@ begin
   WizardForm.Caption := 'QuantSage v{#AppVersion} 安装向导';
 
   ExtractTemporaryFile('pay_qr.bmp');
-  ExtractTemporaryFile('qs_device_code.exe');
-  // Compute device code (runs the bundled EXE)
+  // Compute device code from MachineGuid (same algorithm as Python app)
   DeviceCode := GetDeviceCode;
 
   // ═══ Page 1: Features ═══
@@ -308,23 +298,50 @@ begin
   PurchasePage := CreateInputQueryPage(AgreementPage.ID,
     '购买许可证 — {#LicensePrice}',
     '请用支付宝扫描下方二维码支付 {#LicensePrice}，' +
-    '然后联系开发者（抖音：23230218947）并提供您的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
+    '然后联系开发者（抖音：23230218947）并提供下方显示的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
     '' + #13#10 +
-    '您的设备码：' + DeviceCode + #13#10 +
-    '（此码与您的硬件绑定，请发送给开发者以获取密钥。）' + #13#10 +
     '输入密钥后点击下一步完成激活；' + #13#10 +
     '尚无密钥可留空，点击下一步跳过（安装后从软件首页获取设备码）。',
     '');
 
-  // QR code — half size, centered horizontally, positioned below text
+  // QR code — positioned on the left
   QrImage := TBitmapImage.Create(WizardForm);
   QrImage.Parent := PurchasePage.Surface;
-  QrImage.Width := ScaleX(140);
-  QrImage.Height := ScaleY(140);
-  QrImage.Left := (PurchasePage.SurfaceWidth - QrImage.Width) div 2;
-  QrImage.Top := ScaleY(120);
+  QrImage.Width := ScaleX(130);
+  QrImage.Height := ScaleY(130);
+  QrImage.Left := ScaleX(10);
+  QrImage.Top := ScaleY(36);
   QrImage.Stretch := True;
   QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
+
+  // Device code label — BIG and BOLD, positioned on the right of QR code
+  with TLabel.Create(WizardForm) do
+  begin
+    Parent := PurchasePage.Surface;
+    Caption := '您的设备码';
+    Left := ScaleX(160);
+    Top := ScaleY(40);
+    Font.Size := 10;
+  end;
+  with TLabel.Create(WizardForm) do
+  begin
+    Parent := PurchasePage.Surface;
+    Caption := DeviceCode;
+    Left := ScaleX(160);
+    Top := ScaleY(62);
+    Font.Size := 24;       // 2x normal size
+    Font.Style := [fsBold];
+    Font.Color := clBlue;
+  end;
+  with TLabel.Create(WizardForm) do
+  begin
+    Parent := PurchasePage.Surface;
+    Caption := '将此码发送给开发者以获取激活密钥';
+    Left := ScaleX(160);
+    Top := ScaleY(98);
+    Font.Size := 9;
+    Font.Color := clGray;
+  end;
 
   PurchasePage.Add('许可证密钥 (格式: QS-XXXX-XXXX-XXXX-XXXX):', False);
   PurchasePage.Values[0] := '';
