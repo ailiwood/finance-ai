@@ -39,6 +39,7 @@ Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignorev
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "assets\pay_qr.bmp"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy nocompression
+Source: "..\dist\qs_device_code\qs_device_code.exe"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy
 
 [Types]
 Name: "minimal"; Description: "标准安装"
@@ -72,21 +73,32 @@ var
   SerialValid: Boolean;
   DeviceCode: String;
 
-// ── Device fingerprint (simple hash of MachineGuid) ──
+// ── Device fingerprint (runs bundled EXE, captures stdout to file) ──
 function GetDeviceCode: String;
 var
-  Guid: String;
-  I, Sum: Integer;
+  TmpPath, ExePath, OutFile, CmdLine: String;
+  ResultCode: Integer;
+  Output: AnsiString;
 begin
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Cryptography', 'MachineGuid', Guid) then
+  TmpPath := ExpandConstant('{tmp}');
+  ExePath := TmpPath + '\qs_device_code.exe';
+  OutFile := TmpPath + '\_dc.txt';
+  // Run: qs_device_code.exe > _dc.txt
+  CmdLine := '/c ""' + ExePath + '" > "' + OutFile + '""';
+  if Exec('cmd.exe', CmdLine, TmpPath, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
   begin
-    Sum := 0;
-    for I := 1 to Length(Guid) do
-      Sum := (Sum * 31 + Ord(Guid[I])) and $FFFFFFFF;
-    Result := Uppercase(Format('%.8x', [Sum]));
-  end
-  else
-    Result := 'UNKNOWN';
+    if LoadStringFromFile(OutFile, Output) then
+    begin
+      Result := Trim(Output);
+      // Remove any non-hex chars (newlines, spaces)
+      StringChangeEx(Result, #13, '', True);
+      StringChangeEx(Result, #10, '', True);
+      StringChangeEx(Result, ' ', '', True);
+      if Length(Result) >= 8 then Exit;
+    end;
+  end;
+  // Fallback
+  Result := 'UNKNOWN';
 end;
 
 // ── License key validation (format check only; Ed25519 verified at runtime) ──
@@ -188,10 +200,10 @@ var
 begin
   WizardForm.Caption := 'QuantSage v{#AppVersion} 安装向导';
 
-  // Compute device code early (used on Purchase page)
-  DeviceCode := GetDeviceCode;
-
   ExtractTemporaryFile('pay_qr.bmp');
+  ExtractTemporaryFile('qs_device_code.exe');
+  // Compute device code (runs the bundled EXE)
+  DeviceCode := GetDeviceCode;
 
   // ═══ Page 1: Features ═══
   FeaturesText :=
