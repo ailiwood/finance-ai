@@ -56,6 +56,7 @@ st.set_page_config(
 )
 
 from src.ui.disclaimer_gate import show_disclaimer_gate
+from src.ui.activation_gate import show_activation_gate, is_activated
 from src.ui.config_wizard import show_wizard
 from src.ui.home import show_home
 from src.core.config_manager import (
@@ -264,9 +265,9 @@ def main() -> None:
 
     Flow:
     1. Initialize session state
-    2. Check disclaimer gate
-    3. Check configuration
-    4. Route to wizard or home
+    2. Disclaimer gate
+    3. Activation gate (license check)
+    4. Configuration check → wizard or home
     """
     # Ensure config directory exists
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -335,7 +336,12 @@ def main() -> None:
         show_disclaimer_gate()
         return  # st.stop() called inside show_disclaimer_gate
 
-    # Gate 2: Configuration
+    # Gate 2: Activation (license check — happens inside app, NOT installer)
+    show_activation_gate()
+    # If not activated and not skipped, show_activation_gate calls st.stop()
+    # If activated or skipped, we continue to the next gate
+
+    # Gate 3: Configuration
     config_complete = st.session_state.get("config_complete", False)
     if not config_complete and not is_configured():
         show_wizard()

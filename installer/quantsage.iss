@@ -1,13 +1,13 @@
 ; QuantSage Windows Installer — Inno Setup Script
 ; ================================================
-; Flow: Welcome → Features → Agreement (forced checkboxes) → Purchase → Config → Install
+; Flow: Welcome → Features → Agreement → Install
+; License activation happens inside the app, NOT in the installer.
 ; Language: Simplified Chinese
 
 #define AppName "QuantSage"
 #define AppVersion "1.0.0"
 #define AppPublisher "ailiwood"
 #define AppURL ""
-#define LicensePrice "19.90 RMB"
 
 [Setup]
 AppId={{B8F4A3E2-7D1C-4A9B-8E2F-6C5D4A3B2C1F}
@@ -21,7 +21,7 @@ DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 OutputDir=..\dist\installer
-OutputBaseFilename=QuantSage_Setup_v{#AppVersion}_new
+OutputBaseFilename=QuantSage_Setup_v{#AppVersion}
 SetupIconFile=..\src\ui\assets\logo.ico
 WizardImageFile=assets\wizard.bmp
 WizardSmallImageFile=assets\wizard_small.bmp
@@ -38,7 +38,6 @@ Name: "chinese"; MessagesFile: "assets\ChineseSimplified.isl"
 Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "assets\pay_qr.bmp"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy nocompression
 
 [Types]
 Name: "minimal"; Description: "标准安装"
@@ -67,29 +66,6 @@ var
   AgreementPage: TWizardPage;
   AgreementMemo: TRichEditViewer;
   AgreeCheck, RiskCheck: TCheckBox;
-  PurchasePage: TInputQueryWizardPage;
-  QrImage: TBitmapImage;
-  SerialValid: Boolean;
-
-// ── License key validation (format check only; Ed25519 verified at runtime) ──
-function ValidateLicenseKey(Key: String): Boolean;
-var
-  CleanKey: String;
-  I: Integer;
-begin
-  // Keep original case for base64url (case-sensitive encoding)
-  StringChangeEx(CleanKey, ' ', '', True);
-  StringChangeEx(CleanKey, '.', '', True);  // dot is group separator
-  StringChangeEx(CleanKey, '-', '', True);  // dash from old format / base64url
-  // New Ed25519 format: QS.XXXX.XXXX. ... (base64url, variable length > 16 chars)
-  if (Copy(CleanKey, 1, 2) <> 'QS') and (Copy(CleanKey, 1, 2) <> 'Qs') then
-    begin Result := False; Exit; end;
-  // Accept variable-length base64url key (A-Z, a-z, 0-9, -, _)
-  if Length(CleanKey) >= 16 then
-    Result := True
-  else
-    Result := False;
-end;
 
 // ── Agreement page: force both checkboxes ──
 function OnAgreementNext(Sender: TWizardPage): Boolean;
@@ -109,52 +85,12 @@ begin
   Result := True;
 end;
 
-// ── Purchase page: validate license key ──
-function OnPurchaseNext(Sender: TWizardPage): Boolean;
-var
-  InputKey: String;
-begin
-  InputKey := PurchasePage.Values[0];
-  if InputKey = '' then
-  begin
-    // Allow skip — install in trial mode, activate later from the app
-    if MsgBox('您尚未输入许可证密钥。' + #13#13 +
-              '可以跳过此步骤先完成安装，然后打开软件首页查看设备码，' +
-              '联系开发者购买后即可激活。' + #13#13 +
-              '是否跳过激活，先完成安装？',
-              mbConfirmation, MB_YESNO) = IDYES then
-    begin
-      SerialValid := False;  // Not activated, but allow install
-      Result := True;
-    end
-    else
-      Result := False;
-    Exit;
-  end;
-  SerialValid := ValidateLicenseKey(InputKey);
-  if not SerialValid then
-  begin
-    MsgBox('许可证密钥无效，请检查后重试。' + #13#13 +
-           '如尚未购买，请联系开发者（抖音：23230218947）。', mbError, MB_OK);
-    Result := False;
-  end
-  else
-    Result := True;  // Valid key accepted
-end;
-
-function OnPurchaseSkip(Sender: TWizardPage): Boolean;
-begin
-  Result := SerialValid;
-end;
-
 // ── Build all custom pages ──
 procedure InitializeWizard;
 var
   FeaturesText, AgreementText: String;
 begin
   WizardForm.Caption := 'QuantSage v{#AppVersion} 安装向导';
-
-  ExtractTemporaryFile('pay_qr.bmp');
 
   // ═══ Page 1: Features ═══
   FeaturesText :=
@@ -172,7 +108,10 @@ begin
     '  - 数据源：BaoStock 免费前复权 + AKShare 多源降级' + #13#10 +
     '  - AI 引擎：DeepSeek V4 大模型（需自备 API Key）' + #13#10 +
     '  - 本地运行：所有数据在本地处理，不上传、不回传' + #13#10 +
-    '  - GPU 可选：无显卡也能用，有 NVIDIA 显卡可升级加速';
+    '  - GPU 可选：无显卡也能用，有 NVIDIA 显卡可升级加速' + #13#10 + #13#10 +
+    '激活说明：' + #13#10 +
+    '  安装完成后打开软件，在激活页面查看设备码，' + #13#10 +
+    '  联系开发者（抖音：23230218947）购买许可证密钥即可激活。';
 
   FeaturePage := CreateCustomPage(wpWelcome,
     '欢迎使用 QuantSage',
@@ -224,7 +163,7 @@ begin
 
   AgreementPage := CreateCustomPage(FeaturePage.ID,
     '许可协议与风险告知 — 请下滑完整阅读',
-    '');  // Subtitle set below
+    '');
 
   // Scrollable agreement text
   AgreementMemo := TRichEditViewer.Create(WizardForm);
@@ -238,7 +177,7 @@ begin
   AgreementMemo.UseRichEdit := True;
   AgreementMemo.RTFText := AgreementText;
 
-  // Mandatory checkboxes at the bottom
+  // Mandatory checkboxes
   AgreeCheck := TCheckBox.Create(WizardForm);
   AgreeCheck.Parent := AgreementPage.Surface;
   AgreeCheck.Caption := '我已完整阅读并同意上述软件许可协议';
@@ -254,31 +193,6 @@ begin
   RiskCheck.Width := ScaleX(400);
 
   AgreementPage.OnNextButtonClick := @OnAgreementNext;
-
-  // ═══ Page 3: Purchase ═══
-  PurchasePage := CreateInputQueryPage(AgreementPage.ID,
-    '购买许可证 — {#LicensePrice}',
-    '请用支付宝扫描下方二维码支付 {#LicensePrice}。' + #13#10 +
-    '安装完成后打开软件，首页顶部会显示您的设备码。' + #13#10 +
-    '将设备码发送给开发者（抖音：23230218947）以获取许可证密钥。' + #13#10 +
-    '' + #13#10 +
-    '如已获取密钥，请在下方输入；尚无密钥可留空跳过。',
-    '');
-
-  // QR code — centered
-  QrImage := TBitmapImage.Create(WizardForm);
-  QrImage.Parent := PurchasePage.Surface;
-  QrImage.Width := ScaleX(160);
-  QrImage.Height := ScaleY(160);
-  QrImage.Left := (PurchasePage.SurfaceWidth - QrImage.Width) div 2;
-  QrImage.Top := ScaleY(12);
-  QrImage.Stretch := True;
-  QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
-
-  PurchasePage.Add('许可证密钥 (格式: QS-XXXX-XXXX-XXXX-XXXX):', False);
-  PurchasePage.Values[0] := '';
-  PurchasePage.OnNextButtonClick := @OnPurchaseNext;
-  PurchasePage.OnShouldSkipPage := @OnPurchaseSkip;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -286,21 +200,13 @@ begin
   if CurPageID = AgreementPage.ID then
     WizardForm.NextButton.Caption := '同意并继续(&A)';
 
-  if CurPageID = PurchasePage.ID then
-    WizardForm.NextButton.Caption := '验证并继续(&V)';
-
   if CurPageID = wpFinished then
   begin
     WizardForm.FinishedHeadingLabel.Caption := '安装完成！';
-    if SerialValid then
-      WizardForm.FinishedLabel.Caption :=
-        'QuantSage 已成功安装并激活。' + #13#13 +
-        '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。'
-    else
-      WizardForm.FinishedLabel.Caption :=
-        'QuantSage 已成功安装（试用模式）。' + #13#13 +
-        '打开软件后首页会显示您的设备码。' + #13#10 +
-        '联系开发者（抖音：23230218947）购买许可证密钥后即可激活。' + #13#13 +
-        '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。';
+    WizardForm.FinishedLabel.Caption :=
+      'QuantSage 已成功安装。' + #13#13 +
+      '首次启动时会引导您完成激活。' + #13#10 +
+      '激活需提供设备码（软件内显示），联系开发者购买许可证密钥。' + #13#13 +
+      '重要提示：本软件仅供参考研究，不构成任何投资建议，盈亏自负。';
   end;
 end;
