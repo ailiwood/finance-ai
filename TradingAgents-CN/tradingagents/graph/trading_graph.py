@@ -646,7 +646,7 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date, progress_callback=None, task_id=None):
+    def propagate(self, company_name, trade_date, progress_callback=None, task_id=None, extra_context=""):
         """Run the trading agents graph for a company on a specific date.
 
         Args:
@@ -654,6 +654,8 @@ class TradingAgentsGraph:
             trade_date: Date for analysis
             progress_callback: Optional callback function for progress updates
             task_id: Optional task ID for tracking performance data
+            extra_context: Optional context string (e.g. Kronos prediction)
+                          injected into initial state for all agents.
         """
 
         # 添加详细的接收日志
@@ -668,7 +670,7 @@ class TradingAgentsGraph:
         # Initialize state
         logger.debug(f"🔍 [GRAPH DEBUG] 创建初始状态，传递参数: company_name='{company_name}', trade_date='{trade_date}'")
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date
+            company_name, trade_date, extra_context=extra_context
         )
         logger.debug(f"🔍 [GRAPH DEBUG] 初始状态中的company_of_interest: '{init_agent_state.get('company_of_interest', 'NOT_FOUND')}'")
         logger.debug(f"🔍 [GRAPH DEBUG] 初始状态中的trade_date: '{init_agent_state.get('trade_date', 'NOT_FOUND')}'")

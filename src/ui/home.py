@@ -156,8 +156,42 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
             }
             return
 
+        # ── Kronos prediction BEFORE agent debate (injected as context) ──
+        _kronos_ctx = ""
+        try:
+            from src.plugins.kronos_service.model_engine import get_engine as _get_kronos
+            from src.data.market_data import get_kline as _kl_kronos
+            _kdf = _kl_kronos(symbol, adjust="qfq", lookback_days=500)
+            if _kdf is not None and len(_kdf) >= 30:
+                _kengine = _get_kronos()
+                _ohlcv = []
+                for _, _r in _kdf.tail(120).iterrows():
+                    _ohlcv.append({
+                        "date": str(_r["date"]), "open": float(_r["open"]),
+                        "high": float(_r["high"]), "low": float(_r["low"]),
+                        "close": float(_r["close"]), "volume": int(_r.get("volume", 0)),
+                    })
+                _kpred = _kengine.predict(_ohlcv, horizon_days=10)
+                _is_kronos = "Kronos-base" in str(_kpred.get("method", ""))
+                _engine_label = "Kronos-base 深度学习模型" if _is_kronos else "统计模型(降级)"
+                _kronos_ctx = (
+                    f"## Kronos K线量化预测（{_engine_label}，概率性预测，非投资建议）\n"
+                    f"- 预测方向: {'看涨' if _kpred['direction']=='up' else '看跌' if _kpred['direction']=='down' else '中性'}\n"
+                    f"- 预测区间中值 (10日): ¥{_kpred['target_price']:,.2f}\n"
+                    f"- 预测区间: ¥{_kpred['lower_bound']:,.2f} ~ ¥{_kpred['upper_bound']:,.2f}\n"
+                    f"- 模型置信度: {_kpred['confidence']:.0%}\n"
+                    f"\n请在你的技术分析和辩论中参考上述量化预测。"
+                    f"注意：模型预测为概率性结果，不能替代基本面分析，仅供参考。"
+                )
+                log.info("[Kronos] 预测已注入分析师上下文: dir=%s, target=%.2f, method=%s",
+                         _kpred['direction'], _kpred['target_price'], _kpred['method'])
+        except Exception as _ke:
+            log.warning("[Kronos] 预测计算失败，分析继续（无Kronos上下文）: %s", _ke)
+
         ta = TradingAgentsGraph(debug=False, config=ta_config)
-        final_state, decision = ta.propagate(symbol, analysis_date)
+        final_state, decision = ta.propagate(
+            symbol, analysis_date, extra_context=_kronos_ctx
+        )
 
         # Extract decision fields
         safe_decision: dict = {}

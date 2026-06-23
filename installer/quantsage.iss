@@ -89,30 +89,30 @@ begin
     Result := 'UNKNOWN';
 end;
 
-// ── License key validation ──
+// ── License key validation (format check only; Ed25519 verified at runtime) ──
 function ValidateLicenseKey(Key: String): Boolean;
 var
   CleanKey: String;
-  P1Val, P2Val, CSVal, InvVal: Integer;
-  ExpectedCS, ExpectedInv: Integer;
   I: Integer;
 begin
   CleanKey := Uppercase(Key);
   StringChangeEx(CleanKey, ' ', '', True);
   StringChangeEx(CleanKey, '-', '', True);
-  if Length(CleanKey) <> 18 then begin Result := False; Exit; end;
+  // New Ed25519 format: QS-XXXX-XXXX-... (base32hex, variable length > 20 chars)
+  // Old format: QS-XXXX-YYYY-ZZZZ-WWWW (18 hex chars — backward compat)
   if Copy(CleanKey, 1, 2) <> 'QS' then begin Result := False; Exit; end;
-  for I := 3 to 18 do
-    if not (((CleanKey[I] >= '0') and (CleanKey[I] <= '9')) or
-            ((CleanKey[I] >= 'A') and (CleanKey[I] <= 'F'))) then
-    begin Result := False; Exit; end;
-  P1Val := StrToInt('$' + Copy(CleanKey, 3, 4));
-  P2Val := StrToInt('$' + Copy(CleanKey, 7, 4));
-  CSVal := StrToInt('$' + Copy(CleanKey, 11, 4));
-  InvVal := StrToInt('$' + Copy(CleanKey, 15, 4));
-  ExpectedCS := (P1Val + P2Val + 24221) mod 65536;
-  ExpectedInv := 65535 - ExpectedCS;
-  Result := (CSVal = ExpectedCS) and (InvVal = ExpectedInv);
+  // Accept both old (18 chars) and new (>20 chars) format
+  if Length(CleanKey) >= 18 then
+  begin
+    // Check all chars are valid base32hex / hex
+    for I := 3 to Length(CleanKey) do
+      if not (((CleanKey[I] >= '0') and (CleanKey[I] <= '9')) or
+              ((CleanKey[I] >= 'A') and (CleanKey[I] <= 'V'))) then
+      begin Result := False; Exit; end;
+    Result := True;
+  end
+  else
+    Result := False;
 end;
 
 // ── Save license info for runtime device-binding check ──
@@ -293,7 +293,7 @@ begin
     '购买许可证 — {#LicensePrice}',
     '请用支付宝扫描下方二维码支付 {#LicensePrice}，' +
     '然后联系开发者（抖音：23230218947）并提供您的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
-    #13#10 +
+    '' + #13#10 +
     '您的设备码：' + DeviceCode + #13#10 +
     '（此码与您的硬件绑定，密钥仅在此设备上有效。）' + #13#10 +
     '输入正确的密钥后即可解锁安装。',

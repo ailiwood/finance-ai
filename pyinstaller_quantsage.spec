@@ -16,7 +16,11 @@ _all_datas = []
 _all_binaries = []
 _all_hidden = []
 
-for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare", "tushare", "baostock"]:
+for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare", "tushare", "baostock",
+               # Kronos deep learning deps — all bundled for offline CPU inference
+               "torch", "transformers", "einops", "safetensors",
+               "huggingface_hub", "tokenizers", "regex", "filelock",
+               "tqdm", "pyyaml"]:
     try:
         d, b, h = collect_all(_pkg)
         _all_datas.extend(d)
@@ -31,6 +35,7 @@ _metadata_pkgs = [
     "langchain", "langchain-core", "fastapi", "starlette",
     "uvicorn", "pydantic", "jinja2", "cryptography",
     "fpdf2", "pillow", "pyarrow",
+    "torch", "transformers", "huggingface_hub", "tokenizers",
 ]
 for _mp in _metadata_pkgs:
     _all_datas.extend(copy_metadata(_mp))
@@ -108,13 +113,15 @@ _extra_hidden = [
     # fpdf depends on unittest.mock for digital signatures
     "unittest", "unittest.mock",
 
-    # Kronos deep learning model (MIT)
-    "einops",
-    # NOTE: huggingface_hub is in excludes below (Kronos deps not bundled)
-    # "huggingface_hub", "huggingface_hub.hf_api",
+    # Kronos deep learning model (MIT) — all deps now bundled via collect_all
     "src.plugins.kronos_service.kronos_model",
     "src.plugins.kronos_service.kronos_model.kronos",
     "src.plugins.kronos_service.kronos_model.module",
+    # torch/transformers internals PyInstaller may miss
+    "torch.nn", "torch.nn.functional", "torch.optim",
+    "transformers.modeling_utils", "transformers.configuration_utils",
+    "huggingface_hub.file_download", "huggingface_hub.hf_api",
+    "safetensors.torch", "tokenizers.pre_tokenizers", "tokenizers.decoders",
 ]
 
 # === Analysis ===
@@ -139,10 +146,10 @@ a = Analysis(
     ],
 
     excludes=[
-        # GPU / ML (optional plugin packs)
-        "torch", "torchvision", "torchaudio",
-        "transformers", "tokenizers", "safetensors",
-        "huggingface_hub", "hf_xet",
+        # GPU-only packages (CPU torch is bundled)
+        "torchvision", "torchaudio",
+
+        # Heavy ML (not needed for Kronos CPU inference)
         "accelerate", "datasets", "peft", "sentencepiece",
 
         # Large scientific (not needed at runtime)
@@ -153,11 +160,9 @@ a = Analysis(
 
         # Testing
         "pytest",
-        # NOTE: unittest is NOT excluded — fpdf needs unittest.mock
 
         # External database drivers (not directly needed)
         "psycopg2", "redis",
-        # NOTE: pymongo is NOT excluded — TradingAgents-CN uses it
     ],
 )
 

@@ -272,14 +272,22 @@ class KronosEngine(BaseEngine):
             from .gpu_detector import pick_device
             self._device = pick_device()
 
-            # Redirect HF cache to bundled weights when running frozen (PyInstaller)
+            # Redirect HF cache to vendored weights (works in both dev and frozen)
             import os as _os, sys as _sys
-            if getattr(_sys, "frozen", False):
-                _bundled = _sys._MEIPASS if hasattr(_sys, "_MEIPASS") else ""
-                _cache_path = __import__("pathlib").Path(_bundled) / "src" / "plugins" / "kronos_service" / "kronos_model" / "hf_cache"
-                if _cache_path.exists():
+            from pathlib import Path as _Path
+
+            # Try to find vendored weights relative to this file
+            _this_dir = _Path(__file__).resolve().parent
+            _cache_candidates = [
+                _this_dir / "kronos_model" / "hf_cache",           # Dev: kronos_service/
+                _Path(_sys._MEIPASS) / "src" / "plugins" / "kronos_service" / "kronos_model" / "hf_cache" if getattr(_sys, "frozen", False) else None,
+            ]
+            for _cache_path in _cache_candidates:
+                if _cache_path and _cache_path.exists():
                     _os.environ["HF_HOME"] = str(_cache_path)
-                    _os.environ.setdefault("HF_HUB_OFFLINE", "1")  # Don't try network
+                    _os.environ["HF_HUB_OFFLINE"] = "1"
+                    _os.environ.pop("SSL_CERT_FILE", None)  # Prevent httpx SSL errors in offline mode
+                    break
 
             # Allow user to set HF mirror for China mainland
             _hf_endpoint = _os.environ.get("HF_ENDPOINT", "")
@@ -290,8 +298,12 @@ class KronosEngine(BaseEngine):
             from src.plugins.kronos_service.kronos_model.kronos import (
                 Kronos, KronosTokenizer
             )
-            tokenizer = KronosTokenizer.from_pretrained(self._TOKENIZER_NAME)
-            model = Kronos.from_pretrained(self._MODEL_NAME)
+            tokenizer = KronosTokenizer.from_pretrained(
+                self._TOKENIZER_NAME, local_files_only=True
+            )
+            model = Kronos.from_pretrained(
+                self._MODEL_NAME, local_files_only=True
+            )
             self._predictor = _KronosPredictor(
                 model, tokenizer,
                 device=self._device,
