@@ -46,23 +46,29 @@ def _find_private_key() -> Path:
 
 
 def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") -> str:
-    """Generate an Ed25519-signed license key (compact base64url encoding)."""
+    """Generate an Ed25519-signed license key (compact binary payload, ~104 chars)."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from datetime import date
 
     key_path = _find_private_key()
     priv = Ed25519PrivateKey.from_private_bytes(key_path.read_bytes())
 
-    # Use only 8 chars of device code (shorter key, still unique per device)
-    payload = {"d": device_code[:16], "exp": exp, "lv": level}
-    payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    signature = priv.sign(payload_bytes)
+    # Binary payload (11 bytes): device[8] + exp_days[2] + level[1]
+    dev_bytes = bytes.fromhex(device_code[:16])  # 8 bytes
+    if exp == "9999-12-31":
+        exp_days = 0xFFFF  # Permanent
+    else:
+        d0 = date(2024, 1, 1)
+        d1 = date.fromisoformat(exp)
+        exp_days = max(0, min(0xFFFE, (d1 - d0).days))
+    exp_bytes = exp_days.to_bytes(2, "big")
+    lv_byte = b"\x01" if level == "pro" else b"\x00"
 
-    # Encode: 2-byte length prefix + payload + signature → base64url → groups of 4
-    plen = len(payload_bytes).to_bytes(2, "big")
-    combined = plen + payload_bytes + signature
+    payload = dev_bytes + exp_bytes + lv_byte
+    signature = priv.sign(payload)
+    combined = payload + signature  # 75 bytes total
     b64 = base64.urlsafe_b64encode(combined).decode("ascii").rstrip("=")
-    groups = [b64[i:i+4] for i in range(0, len(b64), 4)]
-    return "QS." + ".".join(groups)  # dot separator (base64url uses - and _)
+    return "QS" + b64  # dot separator (base64url uses - and _)
 
 
 # ═══════════════════════════════════════════════════════════════
