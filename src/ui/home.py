@@ -10,7 +10,6 @@ import os
 import json
 import time
 import threading
-import html as _html
 from datetime import datetime
 from pathlib import Path
 
@@ -24,18 +23,9 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 _TA_AVAILABLE = True
 
-# Inline SVG icons (vector, any scale)
-_ICON_FUNDAMENTALS = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M4 20h16M5.5 18.5V11h13v7.5M3.5 11 12 5l8.5 6M8 18.5v-5h2.5v5M13.5 18.5v-5H16v5"/><path d="M15.5 8.5v-3h4v5"/><path d="M15.5 8.5h4"/></svg>'
-_ICON_TECHNICAL = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M3.5 3.5v17h17"/><path d="M5.5 16.5 9 12.5l3 2.2 5.5-7.2 2 1.5"/><rect x="6.25" y="11" width="2.5" height="3" rx=".5"/><rect x="10.25" y="10" width="2.5" height="2.5" rx=".5"/><rect x="14.25" y="11" width="2.5" height="2.5" rx=".5"/><rect x="17.75" y="7" width="2.5" height="2" rx=".5"/></svg>'
-_ICON_SENTIMENT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#39d0d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M4 5.5h16v10.2a2 2 0 0 1-2 2H10l-4 3v-3.1a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2Z"/><path d="M6.5 12h2l1.5-3 2.2 6 1.8-4h3.5"/></svg>'
-_ICON_RISK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M12 3.5 19 6v5.3c0 4.4-2.9 7.6-7 9.2-4.1-1.6-7-4.8-7-9.2V6l7-2.5Z"/><path d="M12 7v5.3M12 16.2h.01" stroke-width="2.1"/></svg>'
-
-def _card(title: str, icon_svg: str, content: str) -> str:
-    """Render a styled card with SVG icon. Content is HTML-escaped to prevent LLM output from breaking the page."""
-    safe_content = _html.escape(str(content))
-    # Convert markdown-style newlines to <br> for readability inside HTML card
-    safe_content = safe_content.replace("\n", "<br>")
-    return f'<div class="quantsage-card"><div class="quantsage-card-header">{icon_svg} {title}</div><div style="white-space:pre-wrap;line-height:1.7">{safe_content}</div></div>'
+def _section(emoji: str, title: str, content: str) -> str:
+    """Render a report section header in pure markdown (no HTML needed)."""
+    return f"---\n## {emoji} {title}\n\n{content}\n"
 
 CSS_HOME = """
 <style>
@@ -565,17 +555,17 @@ def show_home() -> None:
 
         # Market / Technical
         if reports.get("market_report"):
-            parts.append(_card("📈 技术面分析", _ICON_TECHNICAL, reports["market_report"]))
+            parts.append(_section("📈", "技术面分析", reports["market_report"]))
             parts.append("")
 
         # Fundamentals
         if reports.get("fundamentals_report"):
-            parts.append(_card("📊 基本面分析", _ICON_FUNDAMENTALS, reports["fundamentals_report"]))
+            parts.append(_section("📊", "基本面分析", reports["fundamentals_report"]))
             parts.append("")
 
         # Sentiment
         if reports.get("sentiment_report"):
-            parts.append(_card("💬 情绪面分析", _ICON_SENTIMENT, reports["sentiment_report"]))
+            parts.append(_section("💬", "投资者情绪分析", reports["sentiment_report"]))
             parts.append("")
 
         # News
@@ -586,7 +576,7 @@ def show_home() -> None:
 
         # Risk / Final Decision
         if reports.get("final_trade_decision") or reports.get("judge_decision"):
-            parts.append(_card("🛡️ 风险管控与最终决策", _ICON_RISK,
+            parts.append(_section("🛡️", "风险管控与最终决策",
                 reports.get("final_trade_decision") or reports.get("judge_decision", "")))
             parts.append("")
 
