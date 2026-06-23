@@ -72,24 +72,28 @@ var
   SerialValid: Boolean;
   DeviceCode: String;
 
-// ── Device fingerprint (reads MachineGuid from registry — same as Python app) ──
+// ── Device fingerprint (reads MachineGuid via WScript.Shell COM) ──
 function GetDeviceCode: String;
 var
+  WshShell: Variant;
   Guid: String;
-  I: Integer;
 begin
-  Result := '';
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Cryptography', 'MachineGuid', Guid) then
-  begin
-    // Strip dashes and take first 8 chars (same logic as src/deployment/license.py)
+  Result := 'UNKNOWN';
+  try
+    WshShell := CreateOleObject('WScript.Shell');
+    // Read MachineGuid from registry (same key used by Python app)
+    Guid := WshShell.RegRead('HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid');
+    // Strip { } and dashes, take first 8 chars uppercase
+    StringChangeEx(Guid, '{', '', True);
+    StringChangeEx(Guid, '}', '', True);
     StringChangeEx(Guid, '-', '', True);
     if Length(Guid) >= 8 then
       Result := Uppercase(Copy(Guid, 1, 8))
-    else
+    else if Length(Guid) > 0 then
       Result := Uppercase(Guid);
-  end;
-  if Result = '' then
+  except
     Result := 'UNKNOWN';
+  end;
 end;
 
 // ── License key validation (format check only; Ed25519 verified at runtime) ──
@@ -304,32 +308,36 @@ begin
     '尚无密钥可留空，点击下一步跳过（安装后从软件首页获取设备码）。',
     '');
 
-  // QR code — positioned on the left
+  // QR code — centered horizontally, below the subtitle text
   QrImage := TBitmapImage.Create(WizardForm);
   QrImage.Parent := PurchasePage.Surface;
-  QrImage.Width := ScaleX(130);
-  QrImage.Height := ScaleY(130);
-  QrImage.Left := ScaleX(10);
-  QrImage.Top := ScaleY(36);
+  QrImage.Width := ScaleX(150);
+  QrImage.Height := ScaleY(150);
+  QrImage.Left := (PurchasePage.SurfaceWidth - QrImage.Width) div 2;
+  QrImage.Top := ScaleY(8);
   QrImage.Stretch := True;
   QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
 
-  // Device code label — BIG and BOLD, positioned on the right of QR code
+  // Device code label — BIG and BOLD, centered below QR code
   with TLabel.Create(WizardForm) do
   begin
     Parent := PurchasePage.Surface;
     Caption := '您的设备码';
-    Left := ScaleX(160);
-    Top := ScaleY(40);
+    Left := ScaleX(0);
+    Top := ScaleY(168);
+    Width := PurchasePage.SurfaceWidth;
+    Alignment := taCenter;
     Font.Size := 10;
   end;
   with TLabel.Create(WizardForm) do
   begin
     Parent := PurchasePage.Surface;
     Caption := DeviceCode;
-    Left := ScaleX(160);
-    Top := ScaleY(62);
-    Font.Size := 24;       // 2x normal size
+    Left := ScaleX(0);
+    Top := ScaleY(186);
+    Width := PurchasePage.SurfaceWidth;
+    Alignment := taCenter;
+    Font.Size := 22;
     Font.Style := [fsBold];
     Font.Color := clBlue;
   end;
@@ -337,8 +345,10 @@ begin
   begin
     Parent := PurchasePage.Surface;
     Caption := '将此码发送给开发者以获取激活密钥';
-    Left := ScaleX(160);
-    Top := ScaleY(98);
+    Left := ScaleX(0);
+    Top := ScaleY(218);
+    Width := PurchasePage.SurfaceWidth;
+    Alignment := taCenter;
     Font.Size := 9;
     Font.Color := clGray;
   end;
