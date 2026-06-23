@@ -70,31 +70,6 @@ var
   PurchasePage: TInputQueryWizardPage;
   QrImage: TBitmapImage;
   SerialValid: Boolean;
-  DeviceCode: String;
-
-// ── Device fingerprint (reads MachineGuid via WScript.Shell COM) ──
-function GetDeviceCode: String;
-var
-  WshShell: Variant;
-  Guid: String;
-begin
-  Result := 'UNKNOWN';
-  try
-    WshShell := CreateOleObject('WScript.Shell');
-    // Read MachineGuid from registry (same key used by Python app)
-    Guid := WshShell.RegRead('HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid');
-    // Strip { } and dashes, take first 8 chars uppercase
-    StringChangeEx(Guid, '{', '', True);
-    StringChangeEx(Guid, '}', '', True);
-    StringChangeEx(Guid, '-', '', True);
-    if Length(Guid) >= 8 then
-      Result := Uppercase(Copy(Guid, 1, 8))
-    else if Length(Guid) > 0 then
-      Result := Uppercase(Guid);
-  except
-    Result := 'UNKNOWN';
-  end;
-end;
 
 // ── License key validation (format check only; Ed25519 verified at runtime) ──
 function ValidateLicenseKey(Key: String): Boolean;
@@ -114,18 +89,6 @@ begin
     Result := True
   else
     Result := False;
-end;
-
-// ── Save license info for runtime device-binding check ──
-procedure SaveLicenseInfo(Key: String);
-var
-  LicensePath: String;
-  LicenseJson: String;
-begin
-  LicensePath := ExpandConstant('{localappdata}\QuantSage\license.json');
-  LicenseJson := '{ "key": "' + Key + '", "device_code": "' + DeviceCode + '" }';
-  ForceDirectories(ExpandConstant('{localappdata}\QuantSage'));
-  SaveStringToFile(LicensePath, LicenseJson, False);
 end;
 
 // ── Agreement page: force both checkboxes ──
@@ -176,11 +139,7 @@ begin
     Result := False;
   end
   else
-  begin
-    // Save license info for runtime device-binding validation
-    SaveLicenseInfo(InputKey);
-    Result := True;
-  end;
+    Result := True;  // Valid key accepted
 end;
 
 function OnPurchaseSkip(Sender: TWizardPage): Boolean;
@@ -196,8 +155,6 @@ begin
   WizardForm.Caption := 'QuantSage v{#AppVersion} 安装向导';
 
   ExtractTemporaryFile('pay_qr.bmp');
-  // Compute device code from MachineGuid (same algorithm as Python app)
-  DeviceCode := GetDeviceCode;
 
   // ═══ Page 1: Features ═══
   FeaturesText :=
@@ -301,57 +258,22 @@ begin
   // ═══ Page 3: Purchase ═══
   PurchasePage := CreateInputQueryPage(AgreementPage.ID,
     '购买许可证 — {#LicensePrice}',
-    '请用支付宝扫描下方二维码支付 {#LicensePrice}，' +
-    '然后联系开发者（抖音：23230218947）并提供下方显示的设备码，获取绑定此设备的许可证密钥。' + #13#10 +
+    '请用支付宝扫描下方二维码支付 {#LicensePrice}。' + #13#10 +
+    '安装完成后打开软件，首页顶部会显示您的设备码。' + #13#10 +
+    '将设备码发送给开发者（抖音：23230218947）以获取许可证密钥。' + #13#10 +
     '' + #13#10 +
-    '输入密钥后点击下一步完成激活；' + #13#10 +
-    '尚无密钥可留空，点击下一步跳过（安装后从软件首页获取设备码）。',
+    '如已获取密钥，请在下方输入；尚无密钥可留空跳过。',
     '');
 
-  // QR code — centered horizontally, below the subtitle text
+  // QR code — centered
   QrImage := TBitmapImage.Create(WizardForm);
   QrImage.Parent := PurchasePage.Surface;
-  QrImage.Width := ScaleX(150);
-  QrImage.Height := ScaleY(150);
+  QrImage.Width := ScaleX(160);
+  QrImage.Height := ScaleY(160);
   QrImage.Left := (PurchasePage.SurfaceWidth - QrImage.Width) div 2;
-  QrImage.Top := ScaleY(8);
+  QrImage.Top := ScaleY(12);
   QrImage.Stretch := True;
   QrImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\pay_qr.bmp'));
-
-  // Device code label — BIG and BOLD, centered below QR code
-  with TLabel.Create(WizardForm) do
-  begin
-    Parent := PurchasePage.Surface;
-    Caption := '您的设备码';
-    Left := ScaleX(0);
-    Top := ScaleY(168);
-    Width := PurchasePage.SurfaceWidth;
-    Alignment := taCenter;
-    Font.Size := 10;
-  end;
-  with TLabel.Create(WizardForm) do
-  begin
-    Parent := PurchasePage.Surface;
-    Caption := DeviceCode;
-    Left := ScaleX(0);
-    Top := ScaleY(186);
-    Width := PurchasePage.SurfaceWidth;
-    Alignment := taCenter;
-    Font.Size := 22;
-    Font.Style := [fsBold];
-    Font.Color := clBlue;
-  end;
-  with TLabel.Create(WizardForm) do
-  begin
-    Parent := PurchasePage.Surface;
-    Caption := '将此码发送给开发者以获取激活密钥';
-    Left := ScaleX(0);
-    Top := ScaleY(218);
-    Width := PurchasePage.SurfaceWidth;
-    Alignment := taCenter;
-    Font.Size := 9;
-    Font.Color := clGray;
-  end;
 
   PurchasePage.Add('许可证密钥 (格式: QS-XXXX-XXXX-XXXX-XXXX):', False);
   PurchasePage.Values[0] := '';

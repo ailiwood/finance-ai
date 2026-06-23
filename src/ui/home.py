@@ -268,8 +268,8 @@ def show_home() -> None:
 
     # ── Device code (always visible, needed for license activation) ──
     try:
-        from src.deployment.license import get_device_fingerprint
-        _dev_code = get_device_fingerprint()
+        from src.deployment.license import get_device_code
+        _dev_code = get_device_code()
         st.info(f"📟 本机设备码：**{_dev_code}**（购买/激活许可证时需提供此码）")
     except Exception:
         pass
@@ -372,8 +372,8 @@ def show_home() -> None:
                 st.caption("磁盘: 检测不可用")
             # Device code (for license activation)
             try:
-                from src.deployment.license import get_device_fingerprint
-                _dc = get_device_fingerprint()
+                from src.deployment.license import get_device_code
+                _dc = get_device_code()
                 st.caption(f"设备码: {_dc}（购买/激活许可证时需提供此码）")
             except Exception:
                 pass

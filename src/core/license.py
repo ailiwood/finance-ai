@@ -74,9 +74,9 @@ def verify_license(key_str: str, device_code: str) -> dict:
         payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         pub.verify(signature, payload_bytes)
 
-        # Device binding (field "d" = first 8 chars of device code)
+        # Device binding (field "d" = 16-char persistent device code)
         stored_device = payload.get("d", "")
-        if stored_device and stored_device != device_code[:8]:
+        if stored_device and stored_device != device_code[:16]:
             return {"valid": False, "level": "", "exp": "", "reason": "密钥与本设备不匹配（设备码不同）"}
 
         # Expiry check
@@ -187,7 +187,7 @@ def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") 
     priv = Ed25519PrivateKey.from_private_bytes(priv_bytes)
 
     payload = {
-        "d": device_code[:8],   # short field names = shorter key
+        "d": device_code[:16],  # persistent UUID, 16 hex chars
         "exp": exp,
         "lv": level,
     }

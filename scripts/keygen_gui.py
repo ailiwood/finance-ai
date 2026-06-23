@@ -53,7 +53,7 @@ def generate_key(device_code: str, level: str = "pro", exp: str = "9999-12-31") 
     priv = Ed25519PrivateKey.from_private_bytes(key_path.read_bytes())
 
     # Use only 8 chars of device code (shorter key, still unique per device)
-    payload = {"d": device_code[:8], "exp": exp, "lv": level}
+    payload = {"d": device_code[:16], "exp": exp, "lv": level}
     payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = priv.sign(payload_bytes)
 
