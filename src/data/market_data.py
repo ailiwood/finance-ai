@@ -25,6 +25,12 @@ COL_MAP = {
 _source_used: str = ""
 _adjust_used: str = ""
 
+# ── In-memory K-line cache (prevents native library crashes on re-login) ──
+# Key: (symbol, adjust), Value: full DataFrame with max lookback
+# On the second+ call, we slice from cache instead of reconnecting to BaoStock.
+# This also fixes the test machine crash where bs.login() segfaults on second call.
+_kline_cache: dict = {}
+
 
 def _log(msg: str) -> None:
     # Use ASCII-safe replacement to avoid GBK/UnicodeEncodeError on Windows terminals
@@ -282,6 +288,22 @@ def get_kline(
     global _source_used, _adjust_used
     _source_used = _adjust_used = ""
 
+    # ── Cache check: avoid reconnecting to native libs (prevents segfault on re-login) ──
+    _cache_key = (symbol, adjust)
+    if _cache_key in _kline_cache:
+        _cached = _kline_cache[_cache_key]
+        _log(f"get_kline({symbol}) → 缓存命中 ({len(_cached)}行)")
+        from src.monitor import log_data_shape
+        log_data_shape(f"get_kline({symbol}) cached", _cached)
+        # Return slice with requested lookback
+        _cutoff = pd.Timestamp.now() - pd.Timedelta(days=lookback_days + 10)
+        _sliced = _cached[_cached["date"] >= _cutoff].copy()
+        if len(_sliced) >= 3:
+            _sliced.attrs = dict(_cached.attrs)
+            return _sliced
+        # If slice is too small, return full cache
+        return _cached.copy()
+
     end = datetime.now()
     start = end - timedelta(days=lookback_days + 10)
     start_str = start.strftime("%Y-%m-%d")
@@ -308,6 +330,8 @@ def get_kline(
             # Attach metadata so downstream can display source/adjust info
             df.attrs["source"] = _source_used or "unknown"
             df.attrs["adjust"] = _adjust_used or "qfq"
+            # Store in cache for subsequent calls (prevents native re-login crashes)
+            _kline_cache[(symbol, adjust)] = df.copy()
             # Remove legacy global state to prevent stale reads
             _source_used, _adjust_used = "", ""
             # ── Checkpoint: get_kline return ──
@@ -482,6 +506,9 @@ def fetch_china_news(symbol: str, max_news: int = 10) -> str:
 # Free fundamentals fetcher (BaoStock query_stock_basic)
 # ═══════════════════════════════════════════════════════════════
 
+# ── Fundamentals cache (prevents native re-login crash) ──
+_fundamentals_cache: dict = {}
+
 def get_fundamentals(symbol: str) -> str:
     """Fetch A-share fundamental data via BaoStock (free, no registration).
 
@@ -489,6 +516,10 @@ def get_fundamentals(symbol: str) -> str:
     Financial indicators (PE/PB/ROE) require Tushare for complete data.
     Never fabricates — missing fields are clearly marked.
     """
+    # Check cache first (prevents bs.login() segfault on second call)
+    if symbol in _fundamentals_cache:
+        return _fundamentals_cache[symbol]
+
     try:
         import baostock as bs
         lg = bs.login()
@@ -543,7 +574,10 @@ def get_fundamentals(symbol: str) -> str:
             "*BaoStock 免费接口仅提供基本信息。PE/PB/ROE/EPS 等财务指标需配置 Tushare。*",
             "*本报告不编造任何数据。所有标注'暂不可用'的指标均为真实数据缺失。*",
         ]
-        return "\n".join(lines)
+        result = "\n".join(lines)
+        # Cache to avoid BaoStock re-login crashes on subsequent calls
+        _fundamentals_cache[symbol] = result
+        return result
     except ImportError:
         return ""
     except Exception as e:

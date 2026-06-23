@@ -239,15 +239,18 @@ def load_config() -> QuantSageConfig:
         if env_val is not None and env_val != "":
             config[key] = env_val
 
-    # Debug: log masked keys for troubleshooting
-    for sensitive_key in ("deepseek_api_key", "dashscope_api_key", "tushare_token"):
-        val = config.get(sensitive_key, "")
-        if val:
-            logger.info(
-                "[CONFIG] %s: len=%d, masked=%s, is_placeholder=%s",
-                sensitive_key, len(val), _mask_key(val),
-                any(m in val.lower() for m in ("your_", "your-", "_here", "-here", "..."))
-            )
+    # Debug: log masked keys for troubleshooting (once per process to avoid spam)
+    _cfg_hash = hash(str(sorted(config.items())))
+    if _cfg_hash != getattr(load_config, "_last_logged_hash", None):
+        load_config._last_logged_hash = _cfg_hash  # type: ignore[attr-defined]
+        for sensitive_key in ("deepseek_api_key", "dashscope_api_key", "tushare_token"):
+            val = config.get(sensitive_key, "")
+            if val:
+                logger.info(
+                    "[CONFIG] %s: len=%d, masked=%s, is_placeholder=%s",
+                    sensitive_key, len(val), _mask_key(val),
+                    any(m in val.lower() for m in ("your_", "your-", "_here", "-here", "..."))
+                )
 
     return config  # type: ignore[return-value]
 

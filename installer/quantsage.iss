@@ -40,23 +40,22 @@ Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; F
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "assets\pay_qr.bmp"; DestDir: "{tmp}"; Flags: ignoreversion dontcopy nocompression
 
-[Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "快捷方式:"; Flags: checkedonce
-Name: "startmenu"; Description: "添加到开始菜单"; GroupDescription: "快捷方式:"; Flags: checkedonce
-
 [Types]
 Name: "minimal"; Description: "标准安装"
 Name: "custom"; Description: "自定义安装"; Flags: iscustom
 
 [Components]
-Name: "core"; Description: "QuantSage 核心程序"; Types: minimal custom; Flags: fixed
+Name: "core"; Description: "QuantSage 核心程序（必需）"; Types: minimal custom; Flags: fixed
+Name: "desktop_shortcut"; Description: "创建桌面快捷方式"; Types: minimal custom
+Name: "startmenu_shortcut"; Description: "添加到开始菜单"; Types: minimal custom
+Name: "autostart"; Description: "安装完成后启动 QuantSage"; Types: custom
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; Flags: useapppaths; Tasks: startmenu
-Name: "{commondesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; Components: startmenu_shortcut
+Name: "{userdesktop}\{#AppName}"; Filename: "{app}\QuantSage_v{#AppVersion}.exe"; WorkingDir: "{app}"; Components: desktop_shortcut
 
 [Run]
-Filename: "{app}\QuantSage_v{#AppVersion}.exe"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent shellexec; Components: core
+Filename: "{app}\QuantSage_v{#AppVersion}.exe"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent shellexec; Components: autostart
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

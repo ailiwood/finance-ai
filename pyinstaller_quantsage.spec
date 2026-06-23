@@ -109,7 +109,9 @@ _extra_hidden = [
     "unittest", "unittest.mock",
 
     # Kronos deep learning model (MIT)
-    "einops", "huggingface_hub", "huggingface_hub.hf_api",
+    "einops",
+    # NOTE: huggingface_hub is in excludes below (Kronos deps not bundled)
+    # "huggingface_hub", "huggingface_hub.hf_api",
     "src.plugins.kronos_service.kronos_model",
     "src.plugins.kronos_service.kronos_model.kronos",
     "src.plugins.kronos_service.kronos_model.module",

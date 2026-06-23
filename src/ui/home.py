@@ -10,6 +10,7 @@ import os
 import json
 import time
 import threading
+import html as _html
 from datetime import datetime
 from pathlib import Path
 
@@ -30,8 +31,11 @@ _ICON_SENTIMENT = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" f
 _ICON_RISK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="24" height="24"><path d="M12 3.5 19 6v5.3c0 4.4-2.9 7.6-7 9.2-4.1-1.6-7-4.8-7-9.2V6l7-2.5Z"/><path d="M12 7v5.3M12 16.2h.01" stroke-width="2.1"/></svg>'
 
 def _card(title: str, icon_svg: str, content: str) -> str:
-    """Render a styled card with SVG icon."""
-    return f'<div class="quantsage-card"><div class="quantsage-card-header">{icon_svg} {title}</div>{content}</div>'
+    """Render a styled card with SVG icon. Content is HTML-escaped to prevent LLM output from breaking the page."""
+    safe_content = _html.escape(str(content))
+    # Convert markdown-style newlines to <br> for readability inside HTML card
+    safe_content = safe_content.replace("\n", "<br>")
+    return f'<div class="quantsage-card"><div class="quantsage-card-header">{icon_svg} {title}</div><div style="white-space:pre-wrap;line-height:1.7">{safe_content}</div></div>'
 
 CSS_HOME = """
 <style>
@@ -193,6 +197,10 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
 
     except Exception as e:
         _ANALYSIS_MAILBOX = {"error": str(e)}
+    finally:
+        # Safety net: ensure mailbox is never left as None (prevents infinite polling)
+        if _ANALYSIS_MAILBOX is None:
+            _ANALYSIS_MAILBOX = {"error": "分析线程意外终止（未知原因）。请重试或检查日志。"}
 
 
 def _show_history_page() -> None:
@@ -455,6 +463,7 @@ def show_home() -> None:
             st.session_state.analysis_running = True
             st.session_state.analysis_result = None
             st.session_state.analysis_error = None
+            st.session_state._analysis_poll_count = 0  # Reset adaptive polling counter
             thread = threading.Thread(
                 target=_run_analysis,
                 args=(symbol, stock_name or symbol, market_info["market"], depth),
@@ -492,11 +501,28 @@ def show_home() -> None:
             st.session_state.analysis_running = False
             st.rerun()
 
+        # Adaptive polling: short intervals early, longer intervals later
+        # This prevents ~100 reruns during a 200-second analysis which can
+        # overwhelm Streamlit's WebSocket connection.
+        _poll_count = st.session_state.get("_analysis_poll_count", 0) + 1
+        st.session_state._analysis_poll_count = _poll_count
+        _elapsed_est = _poll_count * 3  # rough estimate in seconds
+
         st.markdown('<div class="progress-box">', unsafe_allow_html=True)
-        st.info("⏳ 正在分析中...")
-        st.caption("分析通常需要 3-5 分钟。页面每 2 秒自动刷新。")
+        if _elapsed_est < 60:
+            st.info(f"⏳ 正在分析中...（第 {_poll_count} 次轮询）")
+        else:
+            st.info(f"⏳ 深度分析进行中...（已等待约 {_elapsed_est // 60} 分钟，第 {_poll_count} 次轮询）")
+        st.caption("分析通常需要 3-5 分钟。请保持浏览器窗口打开，无需手动刷新。")
+
+        # Progress bar (rough estimate based on typical 180s analysis)
+        _progress = min(0.95, _elapsed_est / 180)
+        st.progress(_progress)
         st.markdown('</div>', unsafe_allow_html=True)
-        time.sleep(2)
+
+        # Adaptive sleep: 3s for first 60s, 5s after that
+        _sleep = 3 if _elapsed_est < 60 else 5
+        time.sleep(_sleep)
         st.rerun()
 
     # ── Error display ──
@@ -508,7 +534,8 @@ def show_home() -> None:
 
     # ── Results display ──
     if st.session_state.get("analysis_result") and not st.session_state.get("analysis_running"):
-        result = st.session_state.analysis_result
+        try:
+            result = st.session_state.analysis_result
         decision = result.get("decision", {})
         reports = result.get("agent_reports", {})
 
@@ -666,6 +693,16 @@ def show_home() -> None:
             if st.button("清除结果", key="clear_result", use_container_width=True):
                 st.session_state.analysis_result = None
                 st.rerun()
+        except Exception as _render_err:
+            st.error(f"报告渲染异常: {str(_render_err)[:300]}")
+            st.caption("分析已完成，但报告显示出现问题。请尝试下载 Markdown 或 PDF 查看完整内容。")
+            # Still offer downloads from raw data
+            try:
+                _raw_report = "\n\n".join(str(v) for v in reports.values() if v)
+                st.download_button("下载原始报告 (Markdown)", data=_raw_report,
+                    file_name=f"{safe_symbol}_原始报告.md", mime="text/markdown", use_container_width=True)
+            except Exception:
+                pass
 
     st.markdown("</div>", unsafe_allow_html=True)
 
