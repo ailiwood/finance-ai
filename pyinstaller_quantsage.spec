@@ -17,6 +17,9 @@ _all_binaries = []
 _all_hidden = []
 
 for _pkg in ["streamlit", "altair", "pydeck", "chromadb", "fpdf", "PIL", "akshare", "tushare", "baostock",
+
+    # PyArmor runtime
+    "pyarmor_runtime_000000",
                # Kronos deep learning deps — all bundled for offline CPU inference
                "torch", "transformers", "einops", "safetensors",
                "huggingface_hub", "tokenizers", "regex", "filelock",
@@ -55,9 +58,15 @@ _own_datas = [
     # Bundle Kronos model weights (~400MB) — pre-downloaded from HuggingFace
     (os.path.join(spec_dir, "src", "plugins", "kronos_service", "kronos_model", "hf_cache"),
      os.path.join("src", "plugins", "kronos_service", "kronos_model", "hf_cache")),
+    # PyArmor runtime (for obfuscated core modules)
+    (os.path.join(spec_dir, "dist", "obfuscated", "pyarmor_runtime_000000"),
+     "pyarmor_runtime_000000"),
 ]
 
 # ── Hidden imports ──
+
+# PyArmor runtime (for obfuscated modules)
+_pyarmor_hidden = ["pyarmor_runtime_000000"]
 _extra_hidden = [
     # FastAPI + Uvicorn
     "fastapi", "uvicorn", "uvicorn.loops", "uvicorn.loops.auto",
@@ -82,6 +91,9 @@ _extra_hidden = [
 
     # TA-CN data dependencies
     "yfinance", "stockstats", "pymongo", "tushare", "baostock",
+
+    # PyArmor runtime
+    "pyarmor_runtime_000000",
 
     # QuantSage modules
     "src", "src.core", "src.core.config_manager",

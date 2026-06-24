@@ -1,0 +1,25 @@
+# QuantSage Activation Worker — Cloudflare Wrangler Configuration
+# Deploy: cd cloudflare && wrangler deploy
+
+name = "quantsage-activation"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "quantsage_db"
+database_id = "61ee22ab-03c5-431f-9640-a4856c92d366"
+
+# Environment variables (non-secret)
+[vars]
+PUBLIC_KEY_HEX = "3fce9236ba6b25f81e633cea68485906ffced084cb4e4aa0de5dd22554cac9c3"
+
+# Usage model
+usage_model = "standard"
+
+# Observability (optional)
+[observability]
+enabled = true
+head_sampling_rate = 1

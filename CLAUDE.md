@@ -113,12 +113,12 @@ quantsage/
 - [x] **M4 FinBERT 情绪插件** — 情绪打分 + 批量新闻评分 + 情绪指数 ✅ (2025-06-21)
 - [x] **M5 报告 + 合规** — 报告模板 + PDF 导出 + 合规扫描 ✅ (2025-06-21)
 - [x] **M6 方案 A 可分发** — Docker Compose + GPU profiles + 安装指南 ✅ (2025-06-21)
-- [x] **M7 方案 B**（Windows 安装包 + 商用化）← *进行中 (2026-06-21)*
+- [x] **M7 方案 B**（Windows 安装包 + 商用化）✅ (2026-06-24)
 
 **阶段一完成！** 仓库: https://github.com/ailiwood/finance-ai
 **开发环境**：`E:\Anaconda3\envs\quantsage_py311` (Python 3.11, PyTorch 2.12.1+cpu, RTX 5070 Ti)
 
-### M7 进度（2026-06-23 更新）
+### M7 进度（2026-06-24 更新）
 
 - [x] 核心打包(onedir + TA-CN捆绑 + 143 tests)
 - [x] 多LLM供应商(14家) + LLM合规审查闸
@@ -145,17 +145,28 @@ quantsage/
 - [x] 金融知识学习中心(4标签页)
 - [x] Kronos完整集成(CPU torch打包+406MB权重+Agent辩论前注入+结论交叉引用)
 - [x] PyInstaller + Inno Setup 完整构建
+- [x] 激活云端在线签发 (Cloudflare Workers + D1, Ed25519 Web Crypto)
+- [x] 客户端仅验证 (公钥验签, MASTER万能码, 删除本地keygen/私钥)
+- [x] PyArmor 字节码混淆加固 (4核心模块, pyarmor_runtime打包进exe)
+- [x] 激活网页 (单页HTML+JS, GET / → Worker自带)
+- [x] 凭证码生成脚本 (gen_vouchers.py → 发卡平台上传)
+- [x] 永久码签发脚本 (issue_permanent.py → 调用/admin/issue-permanent)
 - [ ] 无显卡电脑端到端验证
 - [ ] 分析进度实时反馈+取消按钮
 
 ### M7 架构要点
+- **激活方案**: 云端在线签发(方案B)，Cloudflare Workers + D1，Ed25519 Web Crypto签名
+- **激活流程**: 用户发卡平台付款→得凭证码→激活网页(redeem)→Worker私钥签发→客户端公钥验签
+- **私钥安全**: 仅存在Worker环境变量(PRIVATE_KEY_HEX)，绝不进客户端/git/安装包
+- **防反编译**: PyArmor 9.2.5字节码混淆(license/device_id/activation_gate/license_persist) + pyarmor_runtime打包
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，torch CPU版+transformers全部打进exe(~1.4GB)
 - **GPU 方案**: CPU版torch开箱即用；nvidia-smi检测→UI引导升级CUDA版；失败回退CPU版
 - **数据桥接**: agent_utils.py 工具层拦截TA-CN A股请求，用get_kline()+format()返回真实数据
 - **Kronos**: vendored代码+HuggingFace权重(NeoQuasar/Kronos-base)，强制base变体，406MB内置
-- **许可**: Ed25519非对称签名,私钥(quantsage_private.key)开发者持有,公钥硬编码客户端,keygen_gui.py一键生成
+- **许可**: Ed25519非对称签名,私钥存Worker,公钥硬编码客户端,凭证码→激活码两步兑换
 - **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
 - **打包路径**: spec中ta_cn_dir必须指向 spec_dir/TradingAgents-CN（不是os.path.dirname(spec_dir)）
+- **激活页**: https://quantsage-activation.lk166564317.workers.dev/ (Cloudflare *.workers.dev免费子域)
 
 **已知问题**：
 - fpdf2 为 LGPLv3 许可证，如需完全合规可替换为 reportlab (BSD)

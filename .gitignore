@@ -59,3 +59,4 @@ src/plugins/kronos_service/kronos_model/hf_cache/
 # License keys (CRITICAL: never commit private key)
 *.key
 quantsage_private.key
+cloudflare/.wrangler/
