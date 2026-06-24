@@ -3,16 +3,22 @@
 Flow: Disclaimer → Activation Gate → Config Wizard → Home
 If already activated (valid license on disk), pass through immediately.
 
-Cloud activation flow:
+Self-built payment flow (no third-party payment platform):
   1. User copies device code from this page
-  2. User buys voucher code from payment platform
-  3. User opens activation web page, enters voucher + device code → gets license key
-  4. User pastes license key here → client verifies with public key → activated!
+  2. User scans Alipay QR code, pays, puts device code in payment note
+  3. User opens activation web page → submits device code as order
+  4. Developer confirms payment → issues license via admin backend
+  5. User queries activation web page with device code → gets license key
+  6. User pastes license key here → client verifies with public key → activated!
 
 The private key NEVER leaves the cloud. The client only verifies.
 """
 
 from __future__ import annotations
+
+import base64
+import os
+from pathlib import Path
 
 import streamlit as st
 
@@ -22,6 +28,33 @@ from src.deployment.license import save_license, load_license
 
 # Cloud activation page URL (Cloudflare Workers *.workers.dev)
 ACTIVATION_PAGE_URL = "https://quantsage-activation.lk166564317.workers.dev/"
+
+
+def _get_qr_base64() -> str:
+    """Load pay_img.jpg and return as base64 data URI.
+
+    Searches: project root, next to exe (PyInstaller _MEIPASS), and CWD.
+    Falls back to empty string if not found.
+    """
+    candidates = []
+    # PyInstaller frozen build
+    if getattr(__import__("sys"), "frozen", False):
+        import sys as _sys
+        if hasattr(_sys, "_MEIPASS"):
+            candidates.append(Path(_sys._MEIPASS) / "pay_img.jpg")
+    # Development: project root
+    candidates.append(Path(__file__).resolve().parent.parent.parent / "pay_img.jpg")
+    # Fallback: CWD
+    candidates.append(Path("pay_img.jpg"))
+
+    for p in candidates:
+        if p.exists():
+            try:
+                data = p.read_bytes()
+                return f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}"
+            except Exception:
+                pass
+    return ""
 
 
 def is_activated() -> bool:
@@ -47,22 +80,22 @@ def show_activation_gate() -> None:
     st.markdown("""
     <style>
     .activation-box {
-        max-width: 560px; margin: 4vh auto; padding: 2rem;
+        max-width: 580px; margin: 2vh auto; padding: 1.5rem 2rem;
         background: #111827; border: 1px solid #1f2937; border-radius: 12px;
     }
-    .activation-title { text-align: center; color: #e8eaed; font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; }
-    .activation-subtitle { text-align: center; color: #9ca3af; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .activation-title { text-align: center; color: #e8eaed; font-size: 1.4rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .activation-subtitle { text-align: center; color: #9ca3af; font-size: 0.85rem; margin-bottom: 1rem; }
     .device-code-box {
         background: #0a0e1a; border: 2px solid #22d3ee; border-radius: 8px;
-        padding: 14px 18px; margin: 12px 0; text-align: center;
+        padding: 12px 16px; margin: 10px 0; text-align: center;
     }
     .device-code-label { color: #9ca3af; font-size: 0.85rem; }
-    .device-code-value { color: #22d3ee; font-size: 1.6rem; font-weight: 700; font-family: 'Consolas', monospace; letter-spacing: 2px; }
+    .device-code-value { color: #22d3ee; font-size: 1.5rem; font-weight: 700; font-family: 'Consolas', monospace; letter-spacing: 2px; }
     .activate-btn-link {
-        display: inline-block; width: 100%; padding: 12px;
+        display: inline-block; width: 100%; padding: 11px;
         background: linear-gradient(135deg, #0891b2, #06b6d4);
         border: none; border-radius: 8px;
-        color: white; font-size: 1rem; font-weight: 600;
+        color: white; font-size: 0.95rem; font-weight: 600;
         text-align: center; text-decoration: none;
         cursor: pointer; transition: all 0.2s;
     }
@@ -70,50 +103,63 @@ def show_activation_gate() -> None:
         background: linear-gradient(135deg, #06b6d4, #22d3ee);
         transform: translateY(-1px);
     }
+    .qr-container { text-align: center; margin: 0.75rem 0; }
+    .qr-container img { max-width: 220px; border-radius: 8px; border: 2px solid #1f2937; }
+    .price-tag { color: #fbbf24; font-size: 1.2rem; font-weight: 700; text-align: center; margin: 0.25rem 0; }
+    .steps-list { color: #9ca3af; font-size: 0.85rem; line-height: 1.6; }
+    .steps-list strong { color: #e8eaed; }
     </style>
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="activation-box">', unsafe_allow_html=True)
     st.markdown('<div class="activation-title">激活 QuantSage</div>', unsafe_allow_html=True)
-    st.markdown('<div class="activation-subtitle">购买许可证密钥以解锁全部功能</div>', unsafe_allow_html=True)
+    st.markdown('<div class="activation-subtitle">支付宝扫码付款 → 提交设备码 → 获取激活码</div>', unsafe_allow_html=True)
 
     # Device code display
     dev_code = get_device_code()
     st.markdown(f"""
     <div class="device-code-box">
-        <div class="device-code-label">📟 本机设备码（点击下方按钮复制）</div>
+        <div class="device-code-label">📟 本机设备码（付款时请备注此码）</div>
         <div class="device-code-value">{dev_code}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Copy device code button
+    # Copy device code
     col_copy, _ = st.columns([1, 2])
     with col_copy:
         st.code(dev_code, language=None)
 
-    # Activation steps
     st.markdown("---")
     st.markdown("### 📋 激活步骤")
 
-    st.markdown(f"""
-    **第1步：获取购买凭证码**
-    - 前往发卡平台购买 QuantSage 激活服务
-    - 付款后自动获得**购买凭证码**
+    st.markdown("""
+    <div class="steps-list">
+    <strong>第1步：支付宝扫码付款</strong><br>
+    扫描下方支付宝商家收款码，<strong>付款时务必在备注中填写您的设备码</strong>（上方16位码）。<br><br>
+    <strong>第2步：提交订单</strong><br>
+    点击下方按钮打开激活网页，在「付款激活」标签页输入设备码，点击「提交订单」。<br><br>
+    <strong>第3步：获取激活码</strong><br>
+    等待开发者确认收款（通常5分钟内），然后在激活网页的「查询激活码」标签页获取激活码。<br><br>
+    <strong>第4步：激活软件</strong><br>
+    将激活码粘贴到下方输入框，点击「激活」按钮。
+    </div>
+    """, unsafe_allow_html=True)
 
-    **第2步：兑换激活码**
-    - 点击下方按钮打开激活网页
-    - 输入购买凭证码 + 本页上方的设备码
-    - 点击"获取激活码"，复制生成的激活码
-
-    **第3步：激活软件**
-    - 将激活码粘贴到下方输入框
-    - 点击"激活"按钮
-    """)
+    # Alipay QR code
+    qr_b64 = _get_qr_base64()
+    if qr_b64:
+        st.markdown(f"""
+        <div class="qr-container">
+            <p class="price-tag">💰 ￥19.90</p>
+            <img src="{qr_b64}" alt="支付宝收款码">
+            <p style="color:#fca5a5;font-size:0.8rem;margin-top:0.3rem;">⚠️ 付款备注务必填写设备码</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Link to activation page
     st.markdown(
         f'<a href="{ACTIVATION_PAGE_URL}" target="_blank" class="activate-btn-link">'
-        f'🌐 打开激活网页（获取激活码）</a>',
+        f'🌐 打开激活网页（提交订单 / 查询激活码）</a>',
         unsafe_allow_html=True,
     )
 

@@ -47,6 +47,8 @@ for _mp in _metadata_pkgs:
 _own_datas = [
     ("DISCLAIMER.md", "."),
     (".env.example", "."),
+    # Alipay QR code for activation page
+    (os.path.join(spec_dir, "pay_img.jpg"), "."),
     (os.path.join(spec_dir, "src"), "src"),
     # User-provided assets
     (os.path.join(spec_dir, "src", "ui", "assets"), os.path.join("src", "ui", "assets")),

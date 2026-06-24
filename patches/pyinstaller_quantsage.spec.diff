@@ -1,0 +1,11 @@
+--- a/pyinstaller_quantsage.spec
++++ b/pyinstaller_quantsage.spec
+@@ -46,6 +46,8 @@
+ _own_datas = [
+     ("DISCLAIMER.md", "."),
+     (".env.example", "."),
++    # Alipay QR code for activation page
++    (os.path.join(spec_dir, "pay_img.jpg"), "."),
+     (os.path.join(spec_dir, "src"), "src"),
+     # User-provided assets
+     (os.path.join(spec_dir, "src", "ui", "assets"), os.path.join("src", "ui", "assets")),

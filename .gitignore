@@ -60,3 +60,5 @@ src/plugins/kronos_service/kronos_model/hf_cache/
 *.key
 quantsage_private.key
 cloudflare/.wrangler/
+pay_img_base64.txt
+quantsage_self_hosted_activation_final/
