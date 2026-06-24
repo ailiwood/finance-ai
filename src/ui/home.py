@@ -162,6 +162,8 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
             from src.plugins.kronos_service.model_engine import get_engine as _get_kronos
             from src.data.market_data import get_kline as _kl_kronos
             _kdf = _kl_kronos(symbol, adjust="qfq", lookback_days=500)
+            _kdata_rows = len(_kdf) if _kdf is not None else 0
+            log.info("[Kronos] data fetched: rows=%d, need>=30", _kdata_rows)
             if _kdf is not None and len(_kdf) >= 30:
                 _kengine = _get_kronos()
                 _ohlcv = []
@@ -185,6 +187,9 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
                 )
                 log.info("[Kronos] 预测已注入分析师上下文: dir=%s, target=%.2f, method=%s",
                          _kpred['direction'], _kpred['target_price'], _kpred['method'])
+            else:
+                log.warning("[Kronos] data insufficient: %%d rows < 30, skipping prediction", _kdata_rows)
+                _kronos_status = {"method": "skipped", "error": f"insufficient data ({_kdata_rows} rows < 30)"}
         except Exception as _ke:
             log.warning("[Kronos] 预测计算失败，分析继续（无Kronos上下文）: %s", _ke)
 

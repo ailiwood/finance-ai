@@ -314,7 +314,7 @@ def get_kline(
 
     # ── Cache check: TTL + date key, prevents stale prices + native re-login crash ──
     _today = datetime.now().strftime("%Y%m%d")
-    _cache_key = (symbol, adjust, _today)
+    _cache_key = (symbol, adjust, lookback_days, _today)
     if _cache_key in _kline_cache:
         _ts, _cached = _kline_cache[_cache_key]
         _age = time.time() - _ts
