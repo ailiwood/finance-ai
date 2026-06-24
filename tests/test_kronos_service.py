@@ -1,118 +1,105 @@
-"""Tests for Kronos FastAPI service endpoints."""
+"""Tests for Kronos model engine (direct API — no FastAPI)."""
 
 import sys
+import random
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
-from fastapi.testclient import TestClient
+from src.plugins.kronos_service.model_engine import (
+    StatsEngine, KronosEngine, get_engine, reset_engine,
+    BaseEngine, PredictionResult,
+)
+from src.plugins.kronos_service.gpu_detector import detect_gpu
 
 
-# Import the FastAPI app
-from src.plugins.kronos_service.service import app
-
-client = TestClient(app)
-
-
-def _make_ohlcv_payload(n: int = 30) -> list[dict]:
+def _make_ohlcv(n: int = 30, base_price: float = 100.0) -> list[dict]:
     """Generate synthetic OHLCV data."""
-    import random
     random.seed(123)
-    price = 100.0
+    price = base_price
     data = []
     for i in range(n):
         change = random.uniform(-0.02, 0.02)
-        close = price * (1 + change)
-        high = close * (1 + random.uniform(0, 0.015))
-        low = close * (1 - random.uniform(0, 0.015))
+        close = round(price * (1 + change), 2)
+        high = round(close * (1 + random.uniform(0, 0.015)), 2)
+        low = round(close * (1 - random.uniform(0, 0.015)), 2)
+        open_p = round(low + random.uniform(0, high - low), 2)
         data.append({
             "date": f"2025-06-{i+1:02d}",
-            "open": round(price, 2),
-            "high": round(high, 2),
-            "low": round(low, 2),
-            "close": round(close, 2),
-            "volume": random.randint(10000, 100000),
+            "open": open_p, "high": high, "low": low,
+            "close": close, "volume": random.randint(10000, 100000),
         })
         price = close
     return data
 
 
-def test_health_endpoint():
-    """GET /health should return 200 with expected fields."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
-    assert "service" in data
-    assert "gpu_available" in data
-    assert "engine_name" in data
-    assert "config_enabled" in data
+# === StatsEngine Tests ===
+
+class TestStatsEngine:
+    def test_name(self):
+        engine = StatsEngine()
+        assert engine.name == "stats_baseline"
+        assert engine.uses_gpu is False
+
+    def test_predict_basic(self):
+        engine = StatsEngine()
+        ohlcv = _make_ohlcv(30)
+        result = engine.predict(ohlcv, horizon_days=5)
+        assert result["direction"] in ("up", "down", "neutral")
+        assert 0.0 <= result["confidence"] <= 1.0
+        assert result["target_price"] > 0
+        assert result["current_price"] > 0
+        assert "disclaimer" in result
+
+    def test_predict_insufficient_data(self):
+        engine = StatsEngine()
+        with pytest.raises(ValueError):
+            engine.predict(_make_ohlcv(5), horizon_days=5)
+
+    def test_predict_result_structure(self):
+        engine = StatsEngine()
+        result = engine.predict(_make_ohlcv(30), horizon_days=10)
+        for field in ("direction", "confidence", "target_price", "current_price",
+                       "lower_bound", "upper_bound", "horizon_days", "method", "disclaimer"):
+            assert field in result, f"Missing: {field}"
 
 
-def test_gpu_endpoint():
-    """GET /gpu should return GPU info."""
-    response = client.get("/gpu")
-    assert response.status_code == 200
-    data = response.json()
-    assert "gpu_available" in data
-    assert "summary" in data
+# === Engine Factory Tests ===
+
+class TestEngineFactory:
+    def test_get_engine_returns_engine(self):
+        reset_engine()
+        engine = get_engine()
+        assert engine is not None
+        assert isinstance(engine, BaseEngine)
+
+    def test_get_engine_is_singleton(self):
+        reset_engine()
+        e1 = get_engine()
+        e2 = get_engine()
+        assert e1 is e2
+
+    def test_kronos_engine_predict(self):
+        reset_engine()
+        engine = get_engine()
+        ohlcv = _make_ohlcv(120)
+        result = engine.predict(ohlcv, horizon_days=10)
+        assert result["direction"] in ("up", "down", "neutral")
+        assert "method" in result
+        assert "disclaimer" in result
 
 
-def test_predict_missing_data():
-    """POST /predict with insufficient data should return 422 (pydantic validation)."""
-    payload = {
-        "symbol": "600519",
-        "ohlcv": [{"date": "2025-06-01", "open": 100, "high": 102, "low": 99, "close": 101, "volume": 1000}],
-        "horizon_days": 5,
-    }
-    response = client.post("/predict", json=payload)
-    # Pydantic validates min_length=10 before our handler runs
-    assert response.status_code == 422
+# === GPU Detector Tests ===
 
+class TestGpuDetector:
+    def test_detect_gpu_returns_result(self):
+        info = detect_gpu()
+        assert info is not None
+        assert hasattr(info, "available")
+        assert hasattr(info, "name")
 
-def test_predict_disabled_service():
-    """When service is disabled, predict returns zeroed result."""
-    payload = {
-        "symbol": "600519",
-        "ohlcv": _make_ohlcv_payload(30),
-        "horizon_days": 5,
-    }
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["symbol"] == "600519"
-    assert "disclaimer" in data
-
-
-def test_batch_predict_disabled():
-    """Batch predict when disabled returns empty predictions."""
-    payload = {
-        "symbols": [
-            {"symbol": "600519", "ohlcv": _make_ohlcv_payload(30), "horizon_days": 5},
-        ]
-    }
-    response = client.post("/batch_predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "disabled"
-    assert len(data["predictions"]) == 0
-
-
-def test_predict_endpoint_structure():
-    """Verify the predict response has all required fields."""
-    payload = {
-        "symbol": "000001",
-        "ohlcv": _make_ohlcv_payload(30),
-        "horizon_days": 10,
-    }
-    response = client.post("/predict", json=payload)
-    data = response.json()
-
-    expected_fields = [
-        "symbol", "direction", "confidence", "target_price",
-        "current_price", "lower_bound", "upper_bound",
-        "horizon_days", "method", "gpu_used", "disclaimer",
-    ]
-    for field in expected_fields:
-        assert field in data, f"Missing field: {field}"
+    def test_detect_gpu_fields(self):
+        info = detect_gpu()
+        for field in ("available", "name", "vram_gb", "fp8_supported"):
+            assert hasattr(info, field), f"Missing: {field}"

@@ -249,15 +249,15 @@ class TestResourcePathIntegration:
         assert callable(export_report_pdf)
         assert callable(export_report_markdown)
 
-    def test_kronos_service_can_import(self):
-        """Kronos service should import cleanly after resource path update."""
-        # Don't actually start the server, just verify imports work
-        from src.plugins.kronos_service.service import app as kronos_app
-        assert kronos_app is not None
-        assert kronos_app.title == "Kronos K-line Prediction Service"
+    def test_kronos_engine_can_import(self):
+        """Kronos model engine should import cleanly after resource path update."""
+        from src.plugins.kronos_service.model_engine import get_engine, reset_engine
+        reset_engine()
+        engine = get_engine()
+        assert engine is not None
 
-    def test_finbert_service_can_import(self):
-        """FinBERT service should import cleanly after resource path update."""
-        from src.plugins.finbert_service.service import app as finbert_app
-        assert finbert_app is not None
-        assert "FinBERT" in finbert_app.title
+    def test_finbert_engine_can_import(self):
+        """FinBERT sentiment engine should import cleanly after resource path update."""
+        from src.plugins.finbert_service.sentiment_engine import get_sentiment_engine
+        engine = get_sentiment_engine(prefer_gpu=False)
+        assert engine is not None

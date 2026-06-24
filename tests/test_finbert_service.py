@@ -1,4 +1,4 @@
-"""Tests for FinBERT sentiment analysis service."""
+"""Tests for FinBERT sentiment analysis engine (direct API, no FastAPI)."""
 
 import sys
 from pathlib import Path
@@ -6,17 +6,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
-from fastapi.testclient import TestClient
-
-
-# Import service
-from src.plugins.finbert_service.service import app
 from src.plugins.finbert_service.sentiment_engine import (
     RuleBasedEngine, FinBERTEngine, get_sentiment_engine,
     SentimentScore, SentimentIndex,
 )
-
-client = TestClient(app)
 
 
 # === RuleBasedEngine Tests ===
@@ -91,51 +84,3 @@ def test_finbert_engine_fallback():
         # Should still produce valid results via fallback
         result = engine.analyze("增长")
         assert result["label"] in ("positive", "negative", "neutral")
-
-
-# === FastAPI endpoints ===
-
-def test_health_endpoint():
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
-    assert "service" in data
-    assert "engine_name" in data
-
-
-def test_analyze_endpoint_disabled():
-    response = client.post("/analyze", json={"text": "公司业绩增长"})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["method"] == "disabled"
-
-
-def test_analyze_structure():
-    response = client.post("/analyze", json={"text": "业绩增长，盈利超预期"})
-    data = response.json()
-    for field in ("text", "label", "score", "confidence", "method", "disclaimer"):
-        assert field in data, f"Missing: {field}"
-
-
-def test_batch_analyze_disabled():
-    texts = ["业绩增长", "亏损下滑", "中性消息"]
-    response = client.post("/batch_analyze", json={"texts": texts})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["method"] == "disabled"
-    assert data["total_texts"] == 3
-
-
-def test_analyze_empty_text_validation():
-    response = client.post("/analyze", json={"text": ""})
-    assert response.status_code == 422  # Pydantic min_length=1
-
-
-def test_batch_analyze_structure():
-    texts = ["消息A", "消息B", "消息C"]
-    response = client.post("/batch_analyze", json={"texts": texts})
-    data = response.json()
-    for field in ("daily_index", "positive_ratio", "negative_ratio", "sentiment_label", "total_texts"):
-        assert field in data, f"Missing: {field}"
-    assert 0.0 <= data["daily_index"] <= 10.0
