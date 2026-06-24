@@ -46,6 +46,7 @@ for _mp in _metadata_pkgs:
 # ── Our own data files ──
 _own_datas = [
   ("DISCLAIMER.md", "."),
+  ("USER_MANUAL.md", "."),
   (".env.example", "."),
   # Alipay QR code for activation page
   (os.path.join(spec_dir, "pay_img.jpg"), "."),

@@ -36,6 +36,7 @@ Name: "chinese"; MessagesFile: "assets\ChineseSimplified.isl"
 
 [Files]
 Source: "assets\licenses\LICENSE.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
+Source: "..\USER_MANUAL.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "assets\licenses\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\dist\QuantSage_v{#AppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
