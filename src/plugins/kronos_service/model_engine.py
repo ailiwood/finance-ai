@@ -453,23 +453,40 @@ class KronosEngine(BaseEngine):
         return result
 
 
-# === Engine Factory ===
+# === Engine Singleton (process-level cache with thread safety) ===
+
+_ENGINE_INSTANCE: BaseEngine | None = None
+_ENGINE_LOCK = __import__("threading").Lock()
+
 
 def get_engine() -> BaseEngine:
-    """Factory: return the best available prediction engine.
+    """Return the singleton prediction engine (thread-safe).
 
-    Kronos-base is preferred but NOT loaded here (lazy loading).
-    Loading happens on first predict() call.
-    If Kronos loading fails at predict time, StatsEngine is used automatically.
+    Kronos-base is preferred but loaded lazily on first predict().
+    The engine is cached globally — subsequent calls return the same instance.
+    This prevents double-loading of the 406MB model weights.
 
     Returns:
-        KronosEngine (with lazy-load) — falls back to StatsEngine on failure.
+        KronosEngine (singleton, lazy-load) — falls back to StatsEngine.
     """
-    # Always return KronosEngine first — it handles its own fallback
-    try:
-        return KronosEngine()
-    except Exception:
-        return StatsEngine()
+    global _ENGINE_INSTANCE
+    if _ENGINE_INSTANCE is not None:
+        return _ENGINE_INSTANCE
+    with _ENGINE_LOCK:
+        if _ENGINE_INSTANCE is not None:
+            return _ENGINE_INSTANCE
+        try:
+            _ENGINE_INSTANCE = KronosEngine()
+        except Exception:
+            _ENGINE_INSTANCE = StatsEngine()
+        return _ENGINE_INSTANCE
+
+
+def reset_engine() -> None:
+    """Reset the engine singleton (for testing)."""
+    global _ENGINE_INSTANCE
+    with _ENGINE_LOCK:
+        _ENGINE_INSTANCE = None
 
 
 def get_engine_summary() -> Dict[str, Any]:

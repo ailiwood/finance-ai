@@ -86,35 +86,41 @@ def _log_and_print(msg: str, level: int = logging.INFO, **kwargs) -> None:
 
 def _open_browser_windows(url: str) -> bool:
     """Try 4 methods to open the browser. Returns True if any succeeds."""
-    for method, fn in [
+    methods = [
         ("webbrowser", lambda: webbrowser.open(url)),
-        ("os.startfile", lambda: os.startfile(url) or True),
-        ("ShellExecuteW", _shell_execute),
-        ("cmd start", _cmd_start),
-    ]:
+        ("os.startfile", lambda: (_os_startfile_impl(url) is not False)),
+        ("ShellExecuteW", lambda: _shell_execute_impl(url)),
+        ("cmd start", lambda: _cmd_start_impl(url)),
+    ]
+    for method, fn in methods:
         try:
             if fn():
                 log.info("Browser opened via %s", method)
                 return True
         except Exception as e:
             log.debug("Browser method %s failed: %s", method, e)
-    log.warning("All browser methods failed")
     return False
 
 
-def _shell_execute() -> bool:
+def _os_startfile_impl(url: str):
+    """os.startfile returns None on success, raises on failure."""
+    os.startfile(url)
+    return True
+
+
+def _shell_execute_impl(url: str) -> bool:
     import ctypes
-    ctypes.windll.shell32.ShellExecuteW(None, "open", url_for_shell, None, None, 1)
-    return True
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "open", url, None, None, 1)
+    # ShellExecuteW returns HINSTANCE > 32 on success
+    return ret > 32
 
 
-def _cmd_start() -> bool:
-    subprocess.run(["cmd", "/c", "start", "", url_for_shell], capture_output=True, timeout=10)
-    return True
-
-
-# Module-level for _open_browser_windows closure access
-url_for_shell = ""
+def _cmd_start_impl(url: str) -> bool:
+    try:
+        subprocess.run(["cmd", "/c", "start", "", url], capture_output=True, timeout=10, check=False)
+        return True
+    except Exception:
+        return False
 
 
 def is_port_available(port: int, host: str = "127.0.0.1") -> bool:
@@ -193,6 +199,9 @@ def _run_server_mode(script_path: str, port: int) -> None:
     _config.set_option("browser.serverPort", port)
     _config.set_option("browser.gatherUsageStats", False)
     _config.set_option("server.websocketPingInterval", 60)
+    # Frozen mode: disable file watcher to prevent torchvision scanning errors
+    _config.set_option("server.fileWatcherType", "none")
+    _config.set_option("server.runOnSave", False)
 
     flag_options = {
         "global_development_mode": False,
@@ -224,13 +233,106 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reset-config", action="store_true")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--version", action="version", version=f"QuantSage v{__version__}")
+    parser.add_argument("--diagnose-kronos", action="store_true",
+                        help="Run Kronos model diagnostic (offline, no Streamlit)")
     parser.add_argument("--_server", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--_script", type=str, help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
+
+# ── Kronos Diagnostic CLI ────────────────────────────────────────────────────
+
+def _run_kronos_diagnostic() -> int:
+    """Run Kronos model diagnostic offline. No Streamlit, no network."""
+    import json as _json
+    diag = {
+        "timestamp": datetime.now().isoformat(),
+        "frozen": getattr(sys, "frozen", False),
+        "python_version": sys.version,
+    }
+
+    for pkg in ["torch", "transformers", "einops", "huggingface_hub", "safetensors"]:
+        try:
+            mod = __import__(pkg)
+            diag[f"{pkg}_version"] = getattr(mod, "__version__", "unknown")
+        except ImportError:
+            diag[f"{pkg}_version"] = "NOT INSTALLED"
+
+    try:
+        import torch
+        diag["torch_cuda_available"] = torch.cuda.is_available()
+    except Exception:
+        diag["torch_cuda_available"] = False
+
+    diag["cpu_count"] = os.cpu_count()
+
+    cache_paths = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        cp = Path(sys._MEIPASS) / "src" / "plugins" / "kronos_service" / "kronos_model" / "hf_cache"
+        cache_paths.append({"source": "frozen", "path": str(cp), "exists": cp.exists()})
+    dev_cp = Path(__file__).resolve().parent.parent / "plugins" / "kronos_service" / "kronos_model" / "hf_cache"
+    cache_paths.append({"source": "dev", "path": str(dev_cp), "exists": dev_cp.exists()})
+    diag["weight_cache_paths"] = cache_paths
+
+    diag["prediction_method"] = None
+    diag["model_loaded"] = False
+    diag["fallback_used"] = False
+    diag["error"] = None
+    diag["advice"] = None
+
+    try:
+        from src.plugins.kronos_service.model_engine import get_engine
+        engine = get_engine()
+        diag["engine_name"] = engine.name
+        diag["engine_loaded"] = getattr(engine, "is_loaded", None) if hasattr(engine, "is_loaded") else None
+
+        import random
+        random.seed(42)
+        base = 100.0
+        sample_ohlcv = []
+        for i in range(120):
+            chg = (random.random() - 0.48) * 0.03
+            close = base * (1 + chg)
+            high = close * (1 + random.random() * 0.01)
+            low = close * (1 - random.random() * 0.01)
+            open_p = low + random.random() * (high - low)
+            sample_ohlcv.append({
+                "date": f"2024-{(i//20+1):02d}-{(i%20+1):02d}",
+                "open": round(open_p, 2), "high": round(high, 2),
+                "low": round(low, 2), "close": round(close, 2),
+                "volume": random.randint(1000000, 5000000),
+            })
+            base = close
+
+        result = engine.predict(sample_ohlcv, horizon_days=10)
+        diag["prediction_method"] = str(result.get("method", ""))
+        diag["prediction_direction"] = str(result.get("direction", ""))
+        diag["prediction_target"] = float(result.get("target_price", 0))
+        diag["prediction_confidence"] = float(result.get("confidence", 0))
+
+        is_kronos = "Kronos-base" in diag["prediction_method"] and "fallback" not in diag["prediction_method"].lower()
+        diag["model_loaded"] = is_kronos
+        diag["fallback_used"] = not is_kronos
+
+        if is_kronos:
+            diag["advice"] = "Kronos-base model loaded and running successfully."
+        else:
+            diag["advice"] = "Kronos-base not loaded — statistical fallback used. Check hf_cache weights and dependencies."
+    except Exception as e:
+        diag["error"] = str(e)
+        diag["advice"] = f"Exception during prediction: {e}"
+
+    print(_json.dumps(diag, indent=2, ensure_ascii=False))
+    log.info("Kronos diagnostic: %s", _json.dumps(diag, indent=2, ensure_ascii=False))
+
+    if diag.get("fallback_used") or not diag.get("model_loaded"):
+        print("\n[DIAGNOSE] Kronos-base deep model NOT loaded — using statistical fallback.")
+        return 1
+    print("\n[DIAGNOSE] Kronos-base model loaded successfully.")
+    return 0
+
 def main() -> int:
-    global url_for_shell
     args = parse_args()
 
     # ── CHILD: Streamlit server ──
@@ -250,6 +352,10 @@ def main() -> int:
         log.info("Server stopped normally")
         return 0
 
+    # ── Kronos diagnostic (offline, no Streamlit) ──
+    if args.diagnose_kronos:
+        return _run_kronos_diagnostic()
+
     # ── PARENT: launcher ──
     log.info("QuantSage v%s starting", __version__)
     _log_and_print(f"\n{'='*60}")
@@ -268,7 +374,6 @@ def main() -> int:
         port = alt
 
     url = f"http://127.0.0.1:{port}"
-    url_for_shell = url
 
     log.info("Spawning server subprocess")
     _log_and_print("[QuantSage] Starting server...")
@@ -299,6 +404,12 @@ def main() -> int:
         _log_and_print(f"[QuantSage] Opening {url}")
         if not _open_browser_windows(url):
             _log_and_print(f"[QuantSage] Please visit: {url}")
+            try:
+                _url_file = _LOG_DIR / "last_server_url.txt"
+                _url_file.write_text(url)
+                _log_and_print(f"[QuantSage] Server URL saved to: {_url_file}")
+            except Exception:
+                pass
 
     _log_and_print(f"[QuantSage] Running at {url}. Press Ctrl+C to stop.\n")
 

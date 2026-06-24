@@ -217,6 +217,7 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
             "market": market,
             "decision": safe_decision,
             "agent_reports": agent_reports,
+            "kronos_status": _kronos_status if '_kronos_status' in dir() else None,
         }
 
     except Exception as e:
@@ -629,38 +630,28 @@ def show_home() -> None:
                 reports.get("final_trade_decision") or reports.get("judge_decision", "")))
             parts.append("")
 
-        # ── Kronos K-line Prediction (runs BEFORE conclusion so agents' output
-        #     can be cross-referenced with the model prediction) ──
-        _kronos_pred = None
-        try:
-            from src.plugins.kronos_service.model_engine import get_engine
-            from src.data.market_data import get_kline as _kline_kronos
-            _kdf = _kline_kronos(result["symbol"], lookback_days=500)
-            if _kdf is not None and len(_kdf) >= 30:
-                _engine = get_engine()
-                _ohlcv = []
-                for _, _r in _kdf.tail(120).iterrows():
-                    _ohlcv.append({
-                        "date": str(_r["date"]),
-                        "open": float(_r["open"]), "high": float(_r["high"]),
-                        "low": float(_r["low"]), "close": float(_r["close"]),
-                        "volume": int(_r.get("volume", 0)),
-                    })
-                _kronos_pred = _engine.predict(_ohlcv, horizon_days=10)
-                parts.append("---")
-                parts.append("## 🔮 Kronos 深度学习 K 线预测")
-                _engine_label = "深度学习模型" if "Kronos-base" in str(_kronos_pred.get("method", "")) else "统计模型(降级)"
-                parts.append(f"**预测引擎**: {_kronos_pred['method']} ({_engine_label})")
-                parts.append(f"**当前价格**: ¥{_kronos_pred['current_price']:,.2f}")
-                _k_dir = "看涨 📈" if _kronos_pred['direction'] == 'up' else ("看跌 📉" if _kronos_pred['direction'] == 'down' else "中性")
-                parts.append(f"**预测方向**: {_k_dir}")
-                parts.append(f"**目标价格 (10日)**: ¥{_kronos_pred['target_price']:,.2f}")
-                parts.append(f"**预测区间**: ¥{_kronos_pred['lower_bound']:,.2f} ~ ¥{_kronos_pred['upper_bound']:,.2f}")
-                parts.append(f"**置信度**: {_kronos_pred['confidence']:.0%}")
-                parts.append(f"*{_kronos_pred['disclaimer']}*")
-                parts.append("")
-        except Exception:
-            _kronos_pred = None
+        # ── Kronos K-line Prediction (reuse mailbox result — model runs only ONCE) ──
+        _kronos_pred = result.get("kronos_status")
+        if _kronos_pred and _kronos_pred.get("method") and _kronos_pred["method"] != "failed":
+            parts.append("---")
+            _engine_label = _kronos_pred.get("engine_label", "深度学习模型")
+            parts.append("## 🔮 Kronos 深度学习 K 线预测")
+            parts.append(f"**预测引擎**: {_kronos_pred['method']} ({_engine_label})")
+            parts.append(f"**当前价格**: ¥{_kronos_pred['current_price']:,.2f}")
+            _k_dir = "看涨 📈" if _kronos_pred['direction'] == 'up' else ("看跌 📉" if _kronos_pred['direction'] == 'down' else "中性")
+            parts.append(f"**预测方向**: {_k_dir}")
+            parts.append(f"**目标价格 ({_kronos_pred.get('horizon_days', 10)}日)**: ¥{_kronos_pred['target_price']:,.2f}")
+            parts.append(f"**预测区间**: ¥{_kronos_pred['lower_bound']:,.2f} ~ ¥{_kronos_pred['upper_bound']:,.2f}")
+            parts.append(f"**置信度**: {_kronos_pred['confidence']:.0%}")
+            _disc = _kronos_pred.get("disclaimer", "概率性量化预测，仅供研究参考，不构成投资建议。")
+            parts.append(f"*{_disc}*")
+            parts.append("")
+        elif _kronos_pred and _kronos_pred.get("method") == "failed":
+            parts.append("---")
+            parts.append("## 🔮 Kronos 深度学习 K 线预测")
+            parts.append(f"**状态**: ⚠️ 预测失败 — {_kronos_pred.get('error', '未知错误')}")
+            parts.append("*统计模型降级中。请检查模型权重文件是否完整。*")
+            parts.append("")
 
         # Conclusion (cross-references Kronos prediction when available)
         parts.append("---")
@@ -669,13 +660,14 @@ def show_home() -> None:
         if tp:
             parts.append(f"**AI 参考价位**: ¥{tp:,.2f}")
         # Cross-reference with Kronos if available
-        if _kronos_pred:
+        if _kronos_pred and _kronos_pred.get("method") and _kronos_pred["method"] != "failed":
+            _k_dir2 = "看涨 📈" if _kronos_pred['direction'] == 'up' else ("看跌 📉" if _kronos_pred['direction'] == 'down' else "中性")
             _k_match = (
                 (_kronos_pred['direction'] == 'up' and direction == '看多') or
                 (_kronos_pred['direction'] == 'down' and direction == '看空')
             )
             _kronos_ref = (
-                f"**Kronos 模型预测**: {_k_dir}，目标价 ¥{_kronos_pred['target_price']:,.2f}，"
+                f"**Kronos 模型预测**: {_k_dir2}，目标价 ¥{_kronos_pred['target_price']:,.2f}，"
                 f"与AI多智能体结论{'一致 ✅' if _k_match else '存在分歧 ⚠️'}"
             )
             parts.append(_kronos_ref)
