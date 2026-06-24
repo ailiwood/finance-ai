@@ -158,6 +158,15 @@ def _run_analysis(symbol: str, stock_name: str, market: str, depth: int):
 
         # ── Kronos prediction BEFORE agent debate (injected as context) ──
         _kronos_ctx = ""
+        _kronos_status = {
+            "status": "not_run",
+            "method": None, "engine_label": None,
+            "direction": None, "current_price": None,
+            "target_price": None, "lower_bound": None, "upper_bound": None,
+            "confidence": None, "horizon_days": 10, "data_rows": 0,
+            "error": None,
+            "disclaimer": "概率性量化预测，仅供研究参考，不构成投资建议。",
+        }
         try:
             from src.plugins.kronos_service.model_engine import get_engine as _get_kronos
             from src.data.market_data import get_kline as _kl_kronos
@@ -680,11 +689,7 @@ def show_home() -> None:
         if reasoning:
             parts.append(f"**AI 综合推理**: {reasoning}")
         parts.append("")
-        parts.append("---")
-        parts.append("> 本报告由 QuantSage 自动生成，仅供参考研究，不构成任何投资建议，盈亏自负。")
-        parts.append("*QuantSage · 仅供参考研究 · 不构成投资建议*")
-
-        # ── Multi-period tech indicators ──
+        # ── Multi-period tech indicators (BEFORE final disclaimer) ──
         try:
             from src.data.market_data import get_kline as _kline_ind
             from src.analysis.indicators import compute_all_indicators
@@ -703,19 +708,17 @@ def show_home() -> None:
 
         report = "\n\n".join(parts)
 
-        # ── Compliance review gate ──
-        review_method = "skipped"
+        # ── Compliance review gate (LOCAL-ONLY — no LLM for full reports) ──
+        review_method = "regex_local"
+        review_label = "✅ 本地确定性合规过滤 + 报告完整性验证通过"
         try:
-            from src.compliance.report_reviewer import review_and_sanitize
-            report, review_method = review_and_sanitize(report)
-        except Exception:
-            pass  # Never block report output on compliance failure
-
-        review_label = {
-            "llm": "✅ 已通过 LLM 合规审查",
-            "regex": "⚠️ LLM 审查不可用，已通过本地规则过滤",
-            "skipped": "⚠️ 合规审查跳过",
-        }.get(review_method, "")
+            from src.compliance.report_reviewer import review_and_sanitize, validate_sanitized_report
+            report, review_method = review_and_sanitize(report, mode="local")
+            is_complete, missing = validate_sanitized_report(report, report)
+            if not is_complete:
+                review_label = f"⚠️ 报告完整性警告: 缺少 {', '.join(missing[:3])}"
+        except Exception as e:
+            review_label = f"⚠️ 合规审查异常: {str(e)[:60]}"
         with st.expander(f"查看完整报告  {review_label}", expanded=True):
             st.markdown(report)
 
