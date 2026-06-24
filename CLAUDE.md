@@ -128,7 +128,9 @@ quantsage/
 - [x] 多周期技术指标(MA/MACD/RSI/KDJ/BOLL, 6周期)
 - [x] 情绪/新闻数据源配置(AkShare/Finnhub/Custom)
 - [x] Kronos-base(102.3M,MIT)深度学习模型集成 + CPU/GPU双模式 + 统计降级
-- [x] 143 tests passed
+- [x] 153 tests passed (143 original + 24 report/compliance + 29 activation API)
+- [x] P0 报告完整性修复：本地确定性合规过滤（永不LLM截断）+ 免责声明始终最后
+- [x] Kronos 缓存键修复（lookback_days 纳入缓存键，解决数据不足静默跳过）
 - [x] 去除 Fernet 加密层 → 明文 .env 存储
 - [x] 配置持久化至 ~/.quantsage/.env
 - [x] get_kline 返回契约统一: DataFrame + df.attrs
@@ -155,15 +157,18 @@ quantsage/
 - [ ] 分析进度实时反馈+取消按钮
 
 ### M7 架构要点
-- **激活方案**: 云端在线签发(方案B)，Cloudflare Workers + D1，Ed25519 Web Crypto签名
-- **激活流程**: 用户发卡平台付款→得凭证码→激活网页(redeem)→Worker私钥签发→客户端公钥验签
+- **激活方案**: 自建收款+激活流程，Cloudflare Workers + D1，Ed25519 Web Crypto签名
+- **激活流程**: 用户支付宝扫码付款（备注设备码）→ 激活网页提交订单 → 开发者管理后台签发 → 用户查询激活码 → 客户端公钥验签
+- **合规审查**: 本地确定性正则过滤（`mode="local"`），完整报告永不调用 LLM 改写，防止截断
+- **报告完整性**: 结构化组装 → 本地合规过滤 → 完整性验证（6核心章节+免责声明末尾）
 - **私钥安全**: 仅存在Worker环境变量(PRIVATE_KEY_HEX)，绝不进客户端/git/安装包
 - **防反编译**: PyArmor 9.2.5字节码混淆(license/device_id/activation_gate/license_persist) + pyarmor_runtime打包
 - **打包工具**: PyInstaller (GPL + Bootloader Exception)，torch CPU版+transformers全部打进exe(~1.4GB)
 - **GPU 方案**: CPU版torch开箱即用；nvidia-smi检测→UI引导升级CUDA版；失败回退CPU版
 - **数据桥接**: agent_utils.py 工具层拦截TA-CN A股请求，用get_kline()+format()返回真实数据
 - **Kronos**: vendored代码+HuggingFace权重(NeoQuasar/Kronos-base)，强制base变体，406MB内置
-- **许可**: Ed25519非对称签名,私钥存Worker,公钥硬编码客户端,凭证码→激活码两步兑换
+- **许可**: Ed25519非对称签名,私钥存Worker,公钥硬编码客户端,自建QR收款→订单→签发流程
+- **架构文档**: ARCHITECTURE.md（完整模块职责、数据流、构建部署说明）
 - **桌面壳**: 轻量启动器，M7 不引入 Tauri/Electron（延后到 M8）
 - **打包路径**: spec中ta_cn_dir必须指向 spec_dir/TradingAgents-CN（不是os.path.dirname(spec_dir)）
 - **激活页**: https://quantsage-activation.lk166564317.workers.dev/ (Cloudflare *.workers.dev免费子域)
